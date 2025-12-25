@@ -89,9 +89,19 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.ThisExpression:
 		return evalThisExpression(env)
 	case *ast.NewExpression:
-		return evalNewExpression(node, env)
+		return evalNewExpressionWithClass(node, env)
 	case *ast.SpreadExpression:
 		return Eval(node.Value, env)
+	case *ast.ClassDeclaration:
+		return evalClassDeclaration(node, env)
+	case *ast.SuperExpression:
+		return evalSuperExpression(node, env)
+	case *ast.InterfaceDeclaration:
+		// Interfaces are type-only, just return undefined
+		return UNDEFINED
+	case *ast.TypeAliasDeclaration:
+		// Type aliases are type-only, just return undefined
+		return UNDEFINED
 	}
 	return UNDEFINED
 }

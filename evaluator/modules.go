@@ -18,19 +18,35 @@ var moduleCacheMutex sync.RWMutex
 // CurrentModulePath tracks the current module being evaluated
 var CurrentModulePath string = ""
 
-// Built-in modules
-var builtinModules = map[string]func() *object.ObjectMap{
-	"fs":     initFsModule,
-	"path":   initPathModule,
-	"crypto": initCryptoModule,
-	"os":     initOsModule,
+// getBuiltinModule returns a builtin module by name if it exists
+func getBuiltinModule(name string) (*object.ObjectMap, bool) {
+	switch name {
+	case "fs":
+		return initFsModule(), true
+	case "path":
+		return initPathModule(), true
+	case "crypto":
+		return initCryptoModule(), true
+	case "os":
+		return initOsModule(), true
+	case "http":
+		return initHttpModule(), true
+	case "stream":
+		return initStreamModule(), true
+	case "url":
+		return initURLModule(), true
+	case "querystring":
+		return initQueryStringModule(), true
+	default:
+		return nil, false
+	}
 }
 
 // LoadModule loads a module from a path
 func LoadModule(modulePath string, basePath string) (object.Object, error) {
 	// Check for built-in modules
-	if initFn, ok := builtinModules[modulePath]; ok {
-		return initFn(), nil
+	if mod, ok := getBuiltinModule(modulePath); ok {
+		return mod, nil
 	}
 
 	// Resolve the module path

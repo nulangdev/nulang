@@ -703,3 +703,188 @@ func (es *ExportStatement) String() string {
 	}
 	return out.String()
 }
+
+// ClassDeclaration represents a class definition
+type ClassDeclaration struct {
+	Token      token.Token
+	Name       *Identifier
+	SuperClass *Identifier
+	Body       *ClassBody
+}
+
+func (cd *ClassDeclaration) statementNode()       {}
+func (cd *ClassDeclaration) expressionNode()      {}
+func (cd *ClassDeclaration) TokenLiteral() string { return cd.Token.Literal }
+func (cd *ClassDeclaration) String() string {
+	var out bytes.Buffer
+	out.WriteString("class ")
+	if cd.Name != nil {
+		out.WriteString(cd.Name.String())
+	}
+	if cd.SuperClass != nil {
+		out.WriteString(" extends ")
+		out.WriteString(cd.SuperClass.String())
+	}
+	out.WriteString(" ")
+	out.WriteString(cd.Body.String())
+	return out.String()
+}
+
+// ClassBody represents the body of a class
+type ClassBody struct {
+	Token   token.Token
+	Members []ClassMember
+}
+
+func (cb *ClassBody) TokenLiteral() string { return cb.Token.Literal }
+func (cb *ClassBody) String() string {
+	var out bytes.Buffer
+	out.WriteString("{\n")
+	for _, member := range cb.Members {
+		out.WriteString("  " + member.String() + "\n")
+	}
+	out.WriteString("}")
+	return out.String()
+}
+
+// ClassMember represents a class member (method or property)
+type ClassMember struct {
+	Token     token.Token
+	Name      *Identifier
+	Value     Expression
+	IsStatic  bool
+	IsGetter  bool
+	IsSetter  bool
+	IsPrivate bool
+}
+
+func (cm *ClassMember) TokenLiteral() string { return cm.Token.Literal }
+func (cm *ClassMember) String() string {
+	var out bytes.Buffer
+	if cm.IsStatic {
+		out.WriteString("static ")
+	}
+	if cm.IsGetter {
+		out.WriteString("get ")
+	}
+	if cm.IsSetter {
+		out.WriteString("set ")
+	}
+	if cm.Name != nil {
+		out.WriteString(cm.Name.String())
+	}
+	if cm.Value != nil {
+		out.WriteString(" = ")
+		out.WriteString(cm.Value.String())
+	}
+	return out.String()
+}
+
+// SuperExpression represents 'super' keyword
+type SuperExpression struct {
+	Token token.Token
+}
+
+func (se *SuperExpression) expressionNode()      {}
+func (se *SuperExpression) TokenLiteral() string { return se.Token.Literal }
+func (se *SuperExpression) String() string       { return "super" }
+
+// TypeAnnotation represents a type annotation (TypeScript-like)
+type TypeAnnotation struct {
+	Token    token.Token
+	TypeName string
+	IsArray  bool
+	Generics []*TypeAnnotation
+}
+
+func (ta *TypeAnnotation) expressionNode()      {}
+func (ta *TypeAnnotation) TokenLiteral() string { return ta.Token.Literal }
+func (ta *TypeAnnotation) String() string {
+	var out bytes.Buffer
+	out.WriteString(ta.TypeName)
+	if len(ta.Generics) > 0 {
+		out.WriteString("<")
+		for i, g := range ta.Generics {
+			if i > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(g.String())
+		}
+		out.WriteString(">")
+	}
+	if ta.IsArray {
+		out.WriteString("[]")
+	}
+	return out.String()
+}
+
+// InterfaceDeclaration represents an interface definition
+type InterfaceDeclaration struct {
+	Token   token.Token
+	Name    *Identifier
+	Extends []*Identifier
+	Body    []InterfaceMember
+}
+
+func (id *InterfaceDeclaration) statementNode()       {}
+func (id *InterfaceDeclaration) TokenLiteral() string { return id.Token.Literal }
+func (id *InterfaceDeclaration) String() string {
+	var out bytes.Buffer
+	out.WriteString("interface ")
+	out.WriteString(id.Name.String())
+	if len(id.Extends) > 0 {
+		out.WriteString(" extends ")
+		for i, e := range id.Extends {
+			if i > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(e.String())
+		}
+	}
+	out.WriteString(" { ... }")
+	return out.String()
+}
+
+// InterfaceMember represents a member of an interface
+type InterfaceMember struct {
+	Token      token.Token
+	Name       *Identifier
+	Type       *TypeAnnotation
+	IsOptional bool
+	IsMethod   bool
+	Parameters []*Identifier
+}
+
+func (im *InterfaceMember) TokenLiteral() string { return im.Token.Literal }
+func (im *InterfaceMember) String() string {
+	var out bytes.Buffer
+	out.WriteString(im.Name.String())
+	if im.IsOptional {
+		out.WriteString("?")
+	}
+	if im.Type != nil {
+		out.WriteString(": ")
+		out.WriteString(im.Type.String())
+	}
+	return out.String()
+}
+
+// TypeAliasDeclaration represents a type alias
+type TypeAliasDeclaration struct {
+	Token token.Token
+	Name  *Identifier
+	Type  *TypeAnnotation
+}
+
+func (ta *TypeAliasDeclaration) statementNode()       {}
+func (ta *TypeAliasDeclaration) TokenLiteral() string { return ta.Token.Literal }
+func (ta *TypeAliasDeclaration) String() string {
+	var out bytes.Buffer
+	out.WriteString("type ")
+	out.WriteString(ta.Name.String())
+	out.WriteString(" = ")
+	if ta.Type != nil {
+		out.WriteString(ta.Type.String())
+	}
+	return out.String()
+}

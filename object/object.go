@@ -35,6 +35,8 @@ const (
 	MAP_OBJ          ObjectType = "MAP"
 	SET_OBJ          ObjectType = "SET"
 	BUFFER_OBJ       ObjectType = "BUFFER"
+	CLASS_OBJ        ObjectType = "CLASS"
+	STREAM_OBJ       ObjectType = "STREAM"
 )
 
 // Object interface

@@ -320,6 +320,27 @@ func initBuiltins() {
 	// Buffer constructor
 	builtins["Buffer"] = initBufferConstructor()
 	
+	// HTTP module
+	builtins["http"] = initHttpModule()
+	
+	// Stream module
+	builtins["stream"] = initStreamModule()
+	
+	// URL module
+	builtins["url"] = initURLModule()
+	
+	// Query string module
+	builtins["querystring"] = initQueryStringModule()
+	
+	// Fetch function (global)
+	builtins["fetch"] = initFetchFunction()
+	
+	// Sleep function
+	builtins["sleep"] = initSleepFunction()
+	
+	// Initialize timer functions
+	initTimerBuiltins()
+	
 	// require function for CommonJS-style imports
 	builtins["require"] = &object.Builtin{Name: "require", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {

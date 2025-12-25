@@ -159,6 +159,11 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 		if val, ok := o.Get(propName); ok {
 			return val
 		}
+	case *Class:
+		// Access static members of a class
+		if val, ok := o.Static[propName]; ok {
+			return val
+		}
 	}
 	return UNDEFINED
 }

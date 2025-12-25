@@ -24,6 +24,12 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go.
 - ✅ REPL interativo
 - ✅ Variáveis `__filename` e `__dirname`
 - ✅ Objeto `process` (argv, env, cwd, exit)
+- ✅ **Classes ES6** - `class`, `constructor`, `extends`, `static`, getters/setters
+- ✅ **HTTP/HTTPS** - `http.get`, `http.post`, `fetch`
+- ✅ **Timers** - `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep`
+- ✅ **Streams** - `stream.Readable`, `stream.Writable`, `stream.Transform`
+- ✅ **URL/QueryString** - `url.parse`, `querystring.stringify/parse`
+- ✅ **Interfaces/Types** - Parsing de tipos TypeScript-like (não enforced)
 
 ## Instalação
 
@@ -290,15 +296,15 @@ nulang/
 
 ## Roadmap
 
-- [ ] Classes e herança
+- [x] Classes e herança ✅
 - [ ] Async/Await (assíncrono real)
-- [ ] Import/Export ES6 syntax
-- [ ] HTTP/HTTPS client
+- [x] Import/Export ES6 syntax ✅
+- [x] HTTP/HTTPS client ✅
 - [ ] Regular Expressions
 - [ ] Date
 - [ ] Map e Set
-- [ ] Timers (setTimeout, setInterval)
-- [ ] Streams
+- [x] Timers (setTimeout, setInterval) ✅
+- [x] Streams ✅
 
 ## Licença
 

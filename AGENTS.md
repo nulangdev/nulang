@@ -51,13 +51,18 @@ nulang/
 │   ├── crypto.go              # Módulo crypto
 │   ├── buffer.go              # Buffer
 │   ├── promise.go             # Promises
-│   └── os.go                  # Módulo os
+│   ├── os.go                  # Módulo os
+│   ├── http.go                # Módulo HTTP/HTTPS e fetch
+│   ├── timers.go              # setTimeout, setInterval, sleep
+│   ├── streams.go             # Readable, Writable, Transform streams
+│   └── classes.go             # Suporte a classes ES6
 └── examples/
     ├── example.nu             # Exemplo completo
     ├── simple.nu              # Exemplo básico
     ├── new_features.nu        # Testes de fs, crypto, buffer, promise
     ├── test_es6.nu            # Testes de import ES6
     ├── test_modules.nu        # Testes de módulos
+    ├── test_new_features.nu   # Testes de classes, timers, http, streams
     └── modules/
         └── math_utils.nu      # Módulo de exemplo
 ```
@@ -365,6 +370,122 @@ Promises síncronas (não-async):
 | `EOL`              | "\n" ou "\r\n"                  |
 | `devNull`          | "/dev/null" ou "nul"            |
 
+### 14. Módulo HTTP (`evaluator/http.go`)
+
+| Função                  | Descrição              |
+| ----------------------- | ---------------------- |
+| `http.get(url)`         | Requisição GET         |
+| `http.post(url, body)`  | Requisição POST        |
+| `http.put(url, body)`   | Requisição PUT         |
+| `http.delete(url)`      | Requisição DELETE      |
+| `http.patch(url, body)` | Requisição PATCH       |
+| `http.request(options)` | Requisição customizada |
+| `fetch(url, options?)`  | Fetch API global       |
+
+**Response Object:**
+
+- `status` - Código de status HTTP
+- `statusText` - Texto do status
+- `ok` - boolean, true se 2xx
+- `headers` - Objeto com headers
+- `text()` - Retorna body como string
+- `json()` - Parseia body como JSON
+
+### 15. Timers (`evaluator/timers.go`)
+
+| Função                         | Descrição             |
+| ------------------------------ | --------------------- |
+| `setTimeout(fn, ms, ...args)`  | Executa após delay    |
+| `clearTimeout(id)`             | Cancela timeout       |
+| `setInterval(fn, ms, ...args)` | Executa repetidamente |
+| `clearInterval(id)`            | Cancela interval      |
+| `setImmediate(fn, ...args)`    | Executa imediatamente |
+| `sleep(ms)`                    | Bloqueia por ms       |
+
+### 16. Streams (`evaluator/streams.go`)
+
+**Readable Stream:**
+
+```javascript
+let readable = stream.Readable();
+readable.push("data");
+readable.on("data", (chunk) => console.log(chunk));
+readable.pipe(writable);
+```
+
+**Writable Stream:**
+
+```javascript
+let writable = stream.Writable();
+writable.write("data");
+writable.end();
+console.log(writable.toString());
+```
+
+**Transform Stream:**
+
+```javascript
+let transform = stream.Transform();
+transform._transform((chunk) => chunk.toString().toUpperCase());
+```
+
+### 17. Classes (`evaluator/classes.go`)
+
+Suporte a classes ES6:
+
+```javascript
+class Animal {
+  constructor(name) {
+    this.name = name;
+  }
+
+  speak() {
+    console.log(this.name + " makes a sound");
+  }
+}
+
+class Dog extends Animal {
+  constructor(name, breed) {
+    this.name = name;
+    this.breed = breed;
+  }
+
+  speak() {
+    console.log(this.name + " barks!");
+  }
+}
+
+// Static methods
+class Math {
+  static add(a, b) {
+    return a + b;
+  }
+}
+console.log(Math.add(1, 2)); // 3
+```
+
+**Features suportadas:**
+
+- `class` declarations
+- `constructor`
+- Instance methods
+- `extends` (herança)
+- `static` methods e properties
+- `get`/`set` accessors
+
+### 18. Interfaces/Types (`parser/parser.go`)
+
+Suporte a parsing de tipos TypeScript-like (parse-only, não enforced):
+
+```javascript
+interface User {
+  name: string;
+  age: number;
+}
+
+type Callback = (data: string) => void;
+```
+
 ## Features da Linguagem
 
 ### Variáveis
@@ -531,9 +652,7 @@ go build -o nulang .
 3. **RegExp** - tipo definido mas não implementado
 4. **Date** - tipo definido mas não implementado
 5. **Map/Set** - tipos definidos mas não implementados
-6. **Classes** - não implementadas
-7. **HTTP** - não implementado
-8. **Timers** - setTimeout/setInterval não implementados
+6. **super()** - Chamadas `super(args)` no construtor ainda não propagam para o construtor da superclass
 
 ## Testes
 

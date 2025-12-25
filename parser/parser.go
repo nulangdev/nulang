@@ -113,6 +113,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.ASYNC, p.parseAsyncFunction)
 	p.registerPrefix(token.AWAIT, p.parseAwaitExpression)
 	p.registerPrefix(token.SPREAD, p.parseSpreadExpression)
+	p.registerPrefix(token.CLASS, p.parseClassExpression)
+	p.registerPrefix(token.SUPER, p.parseSuperExpression)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -229,6 +231,12 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseExportStatement()
 	case token.FUNCTION:
 		return p.parseFunctionStatement()
+	case token.CLASS:
+		return p.parseClassStatement()
+	case token.INTERFACE:
+		return p.parseInterfaceStatement()
+	case token.TYPE:
+		return p.parseTypeAliasStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -1072,7 +1080,15 @@ func (p *Parser) parseNewExpression() ast.Expression {
 	exp := &ast.NewExpression{Token: p.curToken}
 
 	p.nextToken()
-	exp.Class = p.parseExpression(CALL)
+	
+	// Parse class name (with lower precedence to not include call)
+	exp.Class = p.parseExpression(MEMBER)
+	
+	// If next token is LPAREN, parse arguments
+	if p.peekTokenIs(token.LPAREN) {
+		p.nextToken()
+		exp.Arguments = p.parseExpressionList(token.RPAREN)
+	}
 
 	return exp
 }
@@ -1134,4 +1150,394 @@ func (p *Parser) curPrecedence() int {
 		return p
 	}
 	return LOWEST
+}
+
+// parseClassStatement parses a class declaration as a statement
+func (p *Parser) parseClassStatement() ast.Statement {
+	class := p.parseClassExpression()
+	if class == nil {
+		return nil
+	}
+	return &ast.ExpressionStatement{Token: class.(*ast.ClassDeclaration).Token, Expression: class}
+}
+
+// parseClassExpression parses a class declaration
+func (p *Parser) parseClassExpression() ast.Expression {
+	cd := &ast.ClassDeclaration{Token: p.curToken}
+	
+	// Class name (optional for expressions, required for declarations)
+	if p.peekTokenIs(token.IDENT) {
+		p.nextToken()
+		cd.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	}
+	
+	// Optional extends clause
+	if p.peekTokenIs(token.EXTENDS) {
+		p.nextToken()
+		if !p.expectPeek(token.IDENT) {
+			return nil
+		}
+		cd.SuperClass = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	}
+	
+	// Class body
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+	
+	cd.Body = p.parseClassBody()
+	
+	return cd
+}
+
+// parseClassBody parses the body of a class
+func (p *Parser) parseClassBody() *ast.ClassBody {
+	body := &ast.ClassBody{Token: p.curToken, Members: []ast.ClassMember{}}
+	
+	p.nextToken()
+	
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		member := p.parseClassMember()
+		if member != nil {
+			body.Members = append(body.Members, *member)
+		}
+		p.nextToken()
+	}
+	
+	return body
+}
+
+// parseClassMember parses a class member (method or property)
+func (p *Parser) parseClassMember() *ast.ClassMember {
+	member := &ast.ClassMember{Token: p.curToken}
+	
+	// Check for modifiers: static, get, set, private, public, protected
+	for {
+		switch p.curToken.Type {
+		case token.STATIC:
+			member.IsStatic = true
+			p.nextToken()
+		case token.GET:
+			member.IsGetter = true
+			p.nextToken()
+		case token.SET:
+			member.IsSetter = true
+			p.nextToken()
+		case token.PRIVATE:
+			member.IsPrivate = true
+			p.nextToken()
+		case token.PUBLIC, token.PROTECTED:
+			// Ignore visibility modifiers
+			p.nextToken()
+		default:
+			goto parseBody
+		}
+	}
+	
+parseBody:
+	// Skip semicolons for empty statements
+	if p.curTokenIs(token.SEMICOLON) || p.curTokenIs(token.RBRACE) {
+		return nil
+	}
+	
+	// Member name
+	if p.curTokenIs(token.IDENT) || p.curToken.Literal == "constructor" {
+		member.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	} else {
+		return nil
+	}
+	
+	// Check if it's a method (followed by parenthesis) or property
+	if p.peekTokenIs(token.LPAREN) {
+		// It's a method
+		p.nextToken()
+		
+		// Parse parameters
+		fn := &ast.FunctionLiteral{Token: p.curToken}
+		fn.Parameters = p.parseFunctionParameters()
+		
+		// Parse body
+		if !p.expectPeek(token.LBRACE) {
+			return nil
+		}
+		fn.Body = p.parseBlockStatement()
+		
+		member.Value = fn
+	} else if p.peekTokenIs(token.ASSIGN) {
+		// It's a property with initializer
+		p.nextToken()
+		p.nextToken()
+		member.Value = p.parseExpression(LOWEST)
+		
+		if p.peekTokenIs(token.SEMICOLON) {
+			p.nextToken()
+		}
+	} else if p.peekTokenIs(token.COLON) {
+		// Type annotation - skip it
+		p.nextToken() // skip :
+		p.skipTypeAnnotation()
+		
+		if p.peekTokenIs(token.ASSIGN) {
+			p.nextToken()
+			p.nextToken()
+			member.Value = p.parseExpression(LOWEST)
+		}
+		
+		if p.peekTokenIs(token.SEMICOLON) {
+			p.nextToken()
+		}
+	}
+	
+	return member
+}
+
+// parseSuperExpression parses 'super' keyword
+func (p *Parser) parseSuperExpression() ast.Expression {
+	return &ast.SuperExpression{Token: p.curToken}
+}
+
+// parseInterfaceStatement parses an interface declaration
+func (p *Parser) parseInterfaceStatement() ast.Statement {
+	id := &ast.InterfaceDeclaration{Token: p.curToken}
+	
+	// Interface name
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	id.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	
+	// Optional extends
+	if p.peekTokenIs(token.EXTENDS) {
+		p.nextToken()
+		id.Extends = []*ast.Identifier{}
+		
+		for {
+			if !p.expectPeek(token.IDENT) {
+				return nil
+			}
+			id.Extends = append(id.Extends, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+			
+			if !p.peekTokenIs(token.COMMA) {
+				break
+			}
+			p.nextToken()
+		}
+	}
+	
+	// Interface body
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+	
+	id.Body = p.parseInterfaceBody()
+	
+	return id
+}
+
+// parseInterfaceBody parses interface members
+func (p *Parser) parseInterfaceBody() []ast.InterfaceMember {
+	members := []ast.InterfaceMember{}
+	
+	p.nextToken()
+	
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		member := p.parseInterfaceMember()
+		if member != nil {
+			members = append(members, *member)
+		}
+		p.nextToken()
+	}
+	
+	return members
+}
+
+// parseInterfaceMember parses a single interface member
+func (p *Parser) parseInterfaceMember() *ast.InterfaceMember {
+	if p.curTokenIs(token.SEMICOLON) || p.curTokenIs(token.COMMA) || p.curTokenIs(token.RBRACE) {
+		return nil
+	}
+	
+	// Skip readonly modifier
+	if p.curTokenIs(token.READONLY) {
+		p.nextToken()
+	}
+	
+	member := &ast.InterfaceMember{Token: p.curToken}
+	
+	if !p.curTokenIs(token.IDENT) {
+		return nil
+	}
+	
+	member.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	
+	// Optional marker
+	if p.peekTokenIs(token.QUESTION) {
+		p.nextToken()
+		member.IsOptional = true
+	}
+	
+	// Type annotation
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation()
+	}
+	
+	// Check for method signature
+	if p.peekTokenIs(token.LPAREN) {
+		member.IsMethod = true
+		p.nextToken()
+		// Skip parameters
+		for !p.curTokenIs(token.RPAREN) && !p.curTokenIs(token.EOF) {
+			p.nextToken()
+		}
+		// Skip return type
+		if p.peekTokenIs(token.COLON) {
+			p.nextToken()
+			p.skipTypeAnnotation()
+		}
+	}
+	
+	// Skip semicolon or comma
+	if p.peekTokenIs(token.SEMICOLON) || p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+	}
+	
+	return member
+}
+
+// parseTypeAliasStatement parses a type alias declaration
+func (p *Parser) parseTypeAliasStatement() ast.Statement {
+	ta := &ast.TypeAliasDeclaration{Token: p.curToken}
+	
+	// Type name
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	ta.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	
+	// Generic parameters (skip for now)
+	if p.peekTokenIs(token.LT) {
+		p.skipGenericParams()
+	}
+	
+	// Equals sign
+	if !p.expectPeek(token.ASSIGN) {
+		return nil
+	}
+	
+	// Skip the type definition (we don't execute types, just parse them)
+	p.nextToken()
+	p.skipTypeAnnotation()
+	
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+	
+	return ta
+}
+
+// skipTypeAnnotation skips over type annotations
+func (p *Parser) skipTypeAnnotation() {
+	// Skip the type annotation by consuming tokens until we hit a terminator
+	depth := 0
+	for {
+		switch p.peekToken.Type {
+		case token.LT:
+			depth++
+			p.nextToken()
+		case token.GT:
+			if depth > 0 {
+				depth--
+				p.nextToken()
+			} else {
+				return
+			}
+		case token.SEMICOLON, token.COMMA, token.RBRACE, token.RPAREN, token.ASSIGN, token.EOF:
+			if depth == 0 {
+				return
+			}
+			p.nextToken()
+		case token.LBRACE:
+			// Object type
+			p.nextToken()
+			p.skipObjectType()
+		case token.LPAREN:
+			// Function type or grouped type
+			p.nextToken()
+			p.skipGroupedType()
+		case token.LBRACKET:
+			// Array type or tuple
+			p.nextToken()
+			p.skipBracketType()
+		default:
+			p.nextToken()
+		}
+		
+		// Check for union/intersection
+		if depth == 0 && !p.peekTokenIs(token.OR) && !p.peekTokenIs(token.AND) && 
+			!p.peekTokenIs(token.LBRACKET) && !p.peekTokenIs(token.DOT) {
+			return
+		}
+	}
+}
+
+// skipObjectType skips an object type definition
+func (p *Parser) skipObjectType() {
+	depth := 1
+	for depth > 0 && !p.curTokenIs(token.EOF) {
+		p.nextToken()
+		switch p.curToken.Type {
+		case token.LBRACE:
+			depth++
+		case token.RBRACE:
+			depth--
+		}
+	}
+}
+
+// skipGroupedType skips a grouped type
+func (p *Parser) skipGroupedType() {
+	depth := 1
+	for depth > 0 && !p.curTokenIs(token.EOF) {
+		p.nextToken()
+		switch p.curToken.Type {
+		case token.LPAREN:
+			depth++
+		case token.RPAREN:
+			depth--
+		}
+	}
+}
+
+// skipBracketType skips array/tuple type notation
+func (p *Parser) skipBracketType() {
+	depth := 1
+	for depth > 0 && !p.curTokenIs(token.EOF) {
+		p.nextToken()
+		switch p.curToken.Type {
+		case token.LBRACKET:
+			depth++
+		case token.RBRACKET:
+			depth--
+		}
+	}
+}
+
+// skipGenericParams skips generic type parameters
+func (p *Parser) skipGenericParams() {
+	if !p.peekTokenIs(token.LT) {
+		return
+	}
+	p.nextToken()
+	
+	depth := 1
+	for depth > 0 && !p.curTokenIs(token.EOF) {
+		p.nextToken()
+		switch p.curToken.Type {
+		case token.LT:
+			depth++
+		case token.GT:
+			depth--
+		}
+	}
 }

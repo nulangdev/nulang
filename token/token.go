@@ -122,6 +122,13 @@ const (
 	YIELD     TokenType = "YIELD"
 	GET       TokenType = "GET"
 	SET       TokenType = "SET"
+	INTERFACE TokenType = "INTERFACE"
+	TYPE      TokenType = "TYPE"
+	IMPLEMENTS TokenType = "IMPLEMENTS"
+	PRIVATE   TokenType = "PRIVATE"
+	PUBLIC    TokenType = "PUBLIC"
+	PROTECTED TokenType = "PROTECTED"
+	READONLY  TokenType = "READONLY"
 )
 
 var keywords = map[string]TokenType{
@@ -169,6 +176,13 @@ var keywords = map[string]TokenType{
 	"yield":      YIELD,
 	"get":        GET,
 	"set":        SET,
+	"interface":  INTERFACE,
+	"type":       TYPE,
+	"implements": IMPLEMENTS,
+	"private":    PRIVATE,
+	"public":     PUBLIC,
+	"protected":  PROTECTED,
+	"readonly":   READONLY,
 }
 
 // LookupIdent checks if the identifier is a keyword
