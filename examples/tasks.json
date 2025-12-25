@@ -1,0 +1,38 @@
+[
+  {
+    "id": "f84d3741-4f70-4aa9-8a66-483e1044610d",
+    "title": "Estudar Nulang",
+    "createdAt": 1.766703042998e12,
+    "description": "Documentação atualizada com novos exemplos de CRUD",
+    "priority": "high",
+    "completed": false,
+    "updatedAt": 1.766703052469e12
+  },
+  {
+    "id": "7ce71bf5-43d2-41d6-afe9-278de202e2a8",
+    "title": "Fazer compras",
+    "description": "Ir ao supermercado comprar frutas",
+    "priority": "medium",
+    "createdAt": 1.766703052468e12,
+    "completed": false,
+    "updatedAt": 1.766703052468e12
+  },
+  {
+    "title": "Exercícios",
+    "description": "Fazer 30 minutos de caminhada",
+    "priority": "low",
+    "completed": false,
+    "updatedAt": 1.766703052468e12,
+    "id": "1894e8b9-4665-4153-98a5-4b4d55b6d1ef",
+    "createdAt": 1.766703052468e12
+  },
+  {
+    "title": "Reunião importante",
+    "description": "Reunião com a equipe às 14h",
+    "priority": "high",
+    "completed": false,
+    "createdAt": 1.766703052468e12,
+    "id": "414d3572-4892-44ff-9437-c799ab1db441",
+    "updatedAt": 1.766703052468e12
+  }
+]

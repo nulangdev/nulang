@@ -1152,6 +1152,32 @@ func (p *Parser) curPrecedence() int {
 	return LOWEST
 }
 
+// isKeywordAsIdentifier checks if the current token is a keyword that can be used
+// as an identifier in certain contexts (like method names in classes)
+// This matches JavaScript behavior where keywords can be used as property/method names
+func (p *Parser) isKeywordAsIdentifier() bool {
+	switch p.curToken.Type {
+	case token.DELETE, token.IN, token.OF, token.AS, token.FROM,
+		token.GET, token.SET, token.STATIC, token.ASYNC,
+		token.NEW, token.THIS, token.CLASS, token.EXTENDS,
+		token.SUPER, token.TYPEOF, token.INSTANCEOF,
+		token.VOID, token.YIELD, token.DEFAULT,
+		token.RETURN, token.THROW, token.TRY, token.CATCH, token.FINALLY,
+		token.IF, token.ELSE, token.FOR, token.WHILE, token.DO,
+		token.BREAK, token.CONTINUE, token.SWITCH, token.CASE,
+		token.FUNCTION, token.LET, token.CONST, token.VAR,
+		token.IMPORT, token.EXPORT, token.INTERFACE, token.TYPE,
+		token.PRIVATE, token.PUBLIC, token.PROTECTED, token.READONLY,
+		token.IMPLEMENTS, token.NULL, token.UNDEFINED, token.TRUE, token.FALSE:
+		return true
+	}
+	// Also check for "constructor" literal
+	if p.curToken.Literal == "constructor" {
+		return true
+	}
+	return false
+}
+
 // parseClassStatement parses a class declaration as a statement
 func (p *Parser) parseClassStatement() ast.Statement {
 	class := p.parseClassExpression()
@@ -1240,8 +1266,9 @@ parseBody:
 		return nil
 	}
 	
-	// Member name
-	if p.curTokenIs(token.IDENT) || p.curToken.Literal == "constructor" {
+	// Member name - allow identifiers and keywords as method/property names
+	// In JavaScript, keywords can be used as method names in classes
+	if p.curTokenIs(token.IDENT) || p.isKeywordAsIdentifier() {
 		member.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 	} else {
 		return nil

@@ -1,6 +1,7 @@
 package evaluator
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
@@ -157,7 +158,16 @@ func initBuiltins() {
 		if len(args) < 1 {
 			return newError("JSON.parse requires a string argument")
 		}
-		return args[0]
+		str, ok := args[0].(*object.String)
+		if !ok {
+			return newError("JSON.parse: argument must be a string")
+		}
+		var native interface{}
+		err := json.Unmarshal([]byte(str.Value), &native)
+		if err != nil {
+			return newError("JSON.parse: %s", err.Error())
+		}
+		return nativeToObject(native)
 	}})
 	builtins["JSON"] = jsonObj
 	
@@ -376,6 +386,7 @@ func initBuiltins() {
 func stringify(obj object.Object) string {
 	switch o := obj.(type) {
 	case *object.String:
+		// Basic escape of double quotes
 		return fmt.Sprintf("\"%s\"", o.Value)
 	case *object.Number:
 		return fmt.Sprintf("%g", o.Value)
@@ -384,9 +395,14 @@ func stringify(obj object.Object) string {
 	case *object.Null:
 		return "null"
 	case *object.Array:
-		parts := make([]string, len(o.Elements))
-		for i, elem := range o.Elements {
-			parts[i] = stringify(elem)
+		parts := []string{}
+		for _, elem := range o.Elements {
+			s := stringify(elem)
+			if s == "" { // For functions in arrays, JS uses null
+				parts = append(parts, "null")
+			} else {
+				parts = append(parts, s)
+			}
 		}
 		result := "["
 		for i, part := range parts {
@@ -399,7 +415,11 @@ func stringify(obj object.Object) string {
 	case *object.ObjectMap:
 		pairs := []string{}
 		for key, pair := range o.Pairs {
-			pairs = append(pairs, fmt.Sprintf("\"%s\":%s", key, stringify(pair.Value)))
+			s := stringify(pair.Value)
+			// Skip functions/undefined in objects
+			if s != "" {
+				pairs = append(pairs, fmt.Sprintf("\"%s\":%s", key, s))
+			}
 		}
 		result := "{"
 		for i, pair := range pairs {
@@ -409,6 +429,38 @@ func stringify(obj object.Object) string {
 			result += pair
 		}
 		return result + "}"
+	case *object.Function, *object.Builtin, *object.Undefined:
+		return "" // Special marker to skip in objects
 	}
-	return "undefined"
+	return "null"
+}
+
+func nativeToObject(native interface{}) object.Object {
+	switch v := native.(type) {
+	case nil:
+		return NULL
+	case bool:
+		return nativeBoolToBooleanObject(v)
+	case float64:
+		return &object.Number{Value: v}
+	case string:
+		return &object.String{Value: v}
+	case []interface{}:
+		elements := make([]object.Object, len(v))
+		for i, item := range v {
+			elements[i] = nativeToObject(item)
+		}
+		return &object.Array{Elements: elements}
+	case map[string]interface{}:
+		pairs := make(map[string]object.ObjectPair)
+		for key, val := range v {
+			objVal := nativeToObject(val)
+			pairs[key] = object.ObjectPair{
+				Key:   &object.String{Value: key},
+				Value: objVal,
+			}
+		}
+		return &object.ObjectMap{Pairs: pairs}
+	}
+	return UNDEFINED
 }

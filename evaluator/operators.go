@@ -133,10 +133,8 @@ func evalInfixExpression(node *ast.InfixExpression, env *object.Environment) obj
 		return evalNumberInfix(node.Operator, left, right)
 	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
 		return evalStringInfix(node.Operator, left, right)
-	case left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ:
-		if node.Operator == "+" {
-			return &object.String{Value: objectToString(left) + objectToString(right)}
-		}
+	case (left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ) && node.Operator == "+":
+		return &object.String{Value: objectToString(left) + objectToString(right)}
 	case node.Operator == "==":
 		return nativeBoolToBooleanObject(left == right)
 	case node.Operator == "!=":

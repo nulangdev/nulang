@@ -100,6 +100,53 @@ func evalArrayProperty(arr *object.Array, prop string) object.Object {
 			}
 			return &object.Array{Elements: newElements}
 		}}
+	case "splice":
+		return &object.Builtin{Name: "splice", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return &object.Array{Elements: []object.Object{}}
+			}
+			startNum, ok := args[0].(*object.Number)
+			if !ok {
+				return newError("splice start index must be a number")
+			}
+			start := int(startNum.Value)
+			if start < 0 {
+				start = len(arr.Elements) + start
+				if start < 0 {
+					start = 0
+				}
+			}
+			if start > len(arr.Elements) {
+				start = len(arr.Elements)
+			}
+
+			deleteCount := len(arr.Elements) - start
+			if len(args) > 1 {
+				if dn, ok := args[1].(*object.Number); ok {
+					deleteCount = int(dn.Value)
+					if deleteCount < 0 {
+						deleteCount = 0
+					}
+					if start+deleteCount > len(arr.Elements) {
+						deleteCount = len(arr.Elements) - start
+					}
+				}
+			}
+
+			itemsToInsert := []object.Object{}
+			if len(args) > 2 {
+				itemsToInsert = args[2:]
+			}
+
+			removed := make([]object.Object, deleteCount)
+			copy(removed, arr.Elements[start:start+deleteCount])
+
+			// Update array elements
+			newElements := append(arr.Elements[:start], append(itemsToInsert, arr.Elements[start+deleteCount:]...)...)
+			arr.Elements = newElements
+
+			return &object.Array{Elements: removed}
+		}}
 	}
 	return UNDEFINED
 }
