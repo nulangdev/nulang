@@ -795,6 +795,12 @@ func (p *Parser) tryParseArrowParams() []*ast.Identifier {
 	if p.curTokenIs(token.IDENT) {
 		params = append(params, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
 		
+		// Handle type annotation in arrow params
+		if p.peekTokenIs(token.COLON) {
+			p.nextToken()
+			p.skipTypeAnnotation()
+		}
+		
 		for p.peekTokenIs(token.COMMA) {
 			p.nextToken()
 			p.nextToken()
@@ -805,6 +811,12 @@ func (p *Parser) tryParseArrowParams() []*ast.Identifier {
 				return nil
 			}
 			params = append(params, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+
+			// Handle type annotation for subsequent arrow params
+			if p.peekTokenIs(token.COLON) {
+				p.nextToken()
+				p.skipTypeAnnotation()
+			}
 		}
 		
 		if !p.peekTokenIs(token.RPAREN) {
@@ -961,12 +973,26 @@ func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 	p.nextToken()
 
 	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	
+	// Handle optional type annotation: name: type
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation()
+	}
+	
 	identifiers = append(identifiers, ident)
 
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
 		p.nextToken()
 		ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		
+		// Handle optional type annotation for subsequent parameters
+		if p.peekTokenIs(token.COLON) {
+			p.nextToken()
+			p.skipTypeAnnotation()
+		}
+		
 		identifiers = append(identifiers, ident)
 	}
 
