@@ -30,6 +30,9 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go.
 - ✅ **Streams** - `stream.Readable`, `stream.Writable`, `stream.Transform`
 - ✅ **URL/QueryString** - `url.parse`, `querystring.stringify/parse`
 - ✅ **Interfaces/Types** - Parsing de tipos TypeScript-like (não enforced)
+- ✅ **RegExp** - Regular expressions com `test`, `match`, `replace`, `split`
+- ✅ **Date** - Date object com todos os métodos padrão
+- ✅ **Map/Set** - Map, Set, WeakMap, WeakSet com operações completas
 
 ## Instalação
 
@@ -300,9 +303,9 @@ nulang/
 - [ ] Async/Await (assíncrono real)
 - [x] Import/Export ES6 syntax ✅
 - [x] HTTP/HTTPS client ✅
-- [ ] Regular Expressions
-- [ ] Date
-- [ ] Map e Set
+- [x] Regular Expressions ✅
+- [x] Date ✅
+- [x] Map e Set ✅
 - [x] Timers (setTimeout, setInterval) ✅
 - [x] Streams ✅
 

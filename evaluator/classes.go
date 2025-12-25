@@ -305,9 +305,18 @@ func evalNewExpressionWithClass(ne *ast.NewExpression, env *object.Environment) 
 		return createClassInstance(class, args, env)
 	}
 
-	// Check if it's a builtin constructor (e.g., Date, Map, Set)
+	// Check if it's a builtin constructor (e.g., RegExp)
 	if builtin, ok := classObj.(*object.Builtin); ok {
 		return builtin.Fn(args...)
+	}
+
+	// Check for ObjectMap with __call__ (e.g., Date, Map, Set)
+	if objMap, ok := classObj.(*object.ObjectMap); ok {
+		if callFn, ok := objMap.Get("__call__"); ok {
+			if builtin, ok := callFn.(*object.Builtin); ok {
+				return builtin.Fn(args...)
+			}
+		}
 	}
 
 	// Check for function constructor pattern

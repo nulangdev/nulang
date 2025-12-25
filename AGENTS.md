@@ -486,6 +486,96 @@ interface User {
 type Callback = (data: string) => void;
 ```
 
+### 19. RegExp (`evaluator/regexp.go`)
+
+```javascript
+let pattern = RegExp("hello", "gi");
+pattern.test("Hello World"); // true
+pattern.match("hello hello"); // ["hello", "hello"]
+pattern.replace("hello", "hi"); // "hi hello" (or "hi hi" with g flag)
+pattern.split("a,b;c"); // ["a", "b", "c"] for /[,;]/ pattern
+```
+
+**Methods:**
+
+- `test(string)` - Returns boolean
+- `exec(string)` - Returns array with match details or null
+- `match(string)` - Returns array of all matches
+- `replace(string, replacement)` - Returns new string
+- `split(string, limit?)` - Returns array
+
+**Flags:** `i` (ignore case), `g` (global), `m` (multiline), `s` (dotall)
+
+### 20. Date (`evaluator/date.go`)
+
+```javascript
+let now = new Date();
+let birthday = new Date(1990, 5, 15); // June 15, 1990
+let fromTimestamp = new Date(1609459200000);
+let fromString = new Date("2024-01-01");
+
+now.getFullYear(); // 2025
+now.getMonth(); // 0-11
+now.getDate(); // 1-31
+now.getDay(); // 0-6 (0 = Sunday)
+now.getHours(); // 0-23
+now.toISOString(); // "2025-12-25T22:00:00Z"
+```
+
+**Static Methods:**
+
+- `Date.now()` - Current timestamp in ms
+- `Date.parse(string)` - Parse date string to timestamp
+- `Date.UTC(year, month, ...)` - Create UTC timestamp
+
+### 21. Map (`evaluator/mapset.go`)
+
+```javascript
+let myMap = new Map();
+myMap.set("key", "value");
+myMap.get("key"); // "value"
+myMap.has("key"); // true
+myMap.delete("key");
+myMap.size; // 0
+myMap.keys(); // Array of keys
+myMap.values(); // Array of values
+myMap.entries(); // Array of [key, value] pairs
+myMap.forEach((value, key) => console.log(key, value));
+```
+
+### 22. Set (`evaluator/mapset.go`)
+
+```javascript
+let mySet = new Set([1, 2, 3]);
+mySet.add(4);
+mySet.has(2); // true
+mySet.delete(2);
+mySet.size; // 3
+mySet.values(); // [1, 3, 4]
+
+// Set operations
+let a = new Set([1, 2, 3]);
+let b = new Set([2, 3, 4]);
+a.union(b); // Set { 1, 2, 3, 4 }
+a.intersection(b); // Set { 2, 3 }
+a.difference(b); // Set { 1 }
+```
+
+### 23. WeakMap/WeakSet (`evaluator/mapset.go`)
+
+```javascript
+let weakMap = new WeakMap();
+let obj = { id: 1 };
+weakMap.set(obj, "data");
+weakMap.get(obj); // "data"
+weakMap.has(obj); // true
+weakMap.delete(obj);
+
+let weakSet = new WeakSet();
+weakSet.add(obj);
+weakSet.has(obj); // true
+```
+
 ## Features da Linguagem
 
 ### Variáveis
@@ -649,10 +739,7 @@ go build -o nulang .
 
 1. **Promises são síncronas** - não há event loop real
 2. **Async/await** - parseado mas não executa assincronamente
-3. **RegExp** - tipo definido mas não implementado
-4. **Date** - tipo definido mas não implementado
-5. **Map/Set** - tipos definidos mas não implementados
-6. **super()** - Chamadas `super(args)` no construtor ainda não propagam para o construtor da superclass
+3. **super()** - Chamadas `super(args)` no construtor ainda não propagam para o construtor da superclass
 
 ## Testes
 

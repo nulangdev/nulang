@@ -341,6 +341,24 @@ func initBuiltins() {
 	// Initialize timer functions
 	initTimerBuiltins()
 	
+	// RegExp constructor
+	builtins["RegExp"] = initRegExpConstructor()
+	
+	// Date constructor and static methods
+	builtins["Date"] = initDateStaticMethods()
+	
+	// Map constructor
+	builtins["Map"] = initMapConstructor()
+	
+	// Set constructor
+	builtins["Set"] = initSetConstructor()
+	
+	// WeakMap constructor
+	builtins["WeakMap"] = initWeakMapConstructor()
+	
+	// WeakSet constructor
+	builtins["WeakSet"] = initWeakSetConstructor()
+	
 	// require function for CommonJS-style imports
 	builtins["require"] = &object.Builtin{Name: "require", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {
