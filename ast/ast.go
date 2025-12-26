@@ -748,6 +748,7 @@ type ClassDeclaration struct {
 	Name       *Identifier
 	SuperClass Expression
 	Implements []*Identifier // interface names that this class implements
+	Decorators []*Decorator  // decorators applied to the class
 	Body       *ClassBody
 }
 
@@ -797,13 +798,14 @@ func (cb *ClassBody) String() string {
 
 // ClassMember represents a class member (method or property)
 type ClassMember struct {
-	Token     token.Token
-	Name      *Identifier
-	Value     Expression
-	IsStatic  bool
-	IsGetter  bool
-	IsSetter  bool
-	IsPrivate bool
+	Token      token.Token
+	Name       *Identifier
+	Value      Expression
+	IsStatic   bool
+	IsGetter   bool
+	IsSetter   bool
+	IsPrivate  bool
+	Decorators []*Decorator // decorators applied to this member
 }
 
 func (cm *ClassMember) TokenLiteral() string { return cm.Token.Literal }
@@ -950,6 +952,31 @@ func (ds *DeclareStatement) String() string {
 	out.WriteString("declare ")
 	if ds.Value != nil {
 		out.WriteString(ds.Value.String())
+	}
+	return out.String()
+}
+
+// Decorator represents a decorator @name or @name(args)
+type Decorator struct {
+	Token     token.Token
+	Name      *Identifier
+	Arguments []Expression
+}
+
+func (d *Decorator) expressionNode()      {}
+func (d *Decorator) TokenLiteral() string { return d.Token.Literal }
+func (d *Decorator) String() string {
+	var out bytes.Buffer
+	out.WriteString("@")
+	out.WriteString(d.Name.String())
+	if len(d.Arguments) > 0 {
+		args := []string{}
+		for _, a := range d.Arguments {
+			args = append(args, a.String())
+		}
+		out.WriteString("(")
+		out.WriteString(strings.Join(args, ", "))
+		out.WriteString(")")
 	}
 	return out.String()
 }

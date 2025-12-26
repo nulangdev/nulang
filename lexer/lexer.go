@@ -204,6 +204,8 @@ func (l *Lexer) NextToken() token.Token {
 		tok = newToken(token.LBRACKET, l.ch, l.line, l.column)
 	case ']':
 		tok = newToken(token.RBRACKET, l.ch, l.line, l.column)
+	case '@':
+		tok = newToken(token.AT, l.ch, l.line, l.column)
 	case '"', '\'':
 		tok.Type = token.STRING
 		tok.Literal = l.readString(l.ch)

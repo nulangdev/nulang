@@ -150,6 +150,11 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 	}
 	propName := me.Property.(*ast.Identifier).Value
 
+	// Handle Proxy objects
+	if proxy, ok := obj.(*ProxyObject); ok {
+		return ProxyGet(proxy, propName, env)
+	}
+
 	switch o := obj.(type) {
 	case *object.Array:
 		return evalArrayProperty(o, propName)
@@ -194,8 +199,18 @@ func evalAssignmentExpression(ae *ast.AssignmentExpression, env *object.Environm
 		if isError(obj) {
 			return obj
 		}
+		propName := left.Property.(*ast.Identifier).Value
+		
+		// Handle Proxy objects
+		if proxy, ok := obj.(*ProxyObject); ok {
+			result := ProxySet(proxy, propName, right, env)
+			if isError(result) {
+				return result
+			}
+			return right
+		}
+		
 		if objMap, ok := obj.(*object.ObjectMap); ok {
-			propName := left.Property.(*ast.Identifier).Value
 			objMap.Set(propName, right)
 			return right
 		}

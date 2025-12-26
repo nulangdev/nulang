@@ -240,6 +240,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseTypeAliasStatement()
 	case token.DECLARE:
 		return p.parseDeclareStatement()
+	case token.AT:
+		return p.parseDecoratedStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -1359,6 +1361,58 @@ func (p *Parser) isKeywordAsIdentifier() bool {
 		return true
 	}
 	return false
+}
+
+// parseDecorator parses a single decorator @name or @name(args)
+func (p *Parser) parseDecorator() *ast.Decorator {
+	decorator := &ast.Decorator{Token: p.curToken}
+	
+	// Expect identifier after @
+	if !p.expectPeek(token.IDENT) {
+		return nil
+	}
+	
+	decorator.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	
+	// Check for arguments
+	if p.peekTokenIs(token.LPAREN) {
+		p.nextToken()
+		decorator.Arguments = p.parseExpressionList(token.RPAREN)
+	}
+	
+	return decorator
+}
+
+// parseDecoratedStatement parses a decorated class or method
+func (p *Parser) parseDecoratedStatement() ast.Statement {
+	decorators := []*ast.Decorator{}
+	
+	// Collect all decorators
+	for p.curTokenIs(token.AT) {
+		decorator := p.parseDecorator()
+		if decorator != nil {
+			decorators = append(decorators, decorator)
+		}
+		p.nextToken()
+	}
+	
+	// Now parse the decorated element (should be a class)
+	if p.curTokenIs(token.CLASS) {
+		class := p.parseClassExpression()
+		if class == nil {
+			return nil
+		}
+		
+		// Attach decorators to the class
+		if cd, ok := class.(*ast.ClassDeclaration); ok {
+			cd.Decorators = decorators
+		}
+		
+		return &ast.ExpressionStatement{Token: class.(*ast.ClassDeclaration).Token, Expression: class}
+	}
+	
+	p.errors = append(p.errors, "decorators can only be applied to classes and class members")
+	return nil
 }
 
 // parseClassStatement parses a class declaration as a statement

@@ -362,8 +362,12 @@ func evalNewExpressionWithClass(ne *ast.NewExpression, env *object.Environment) 
 		return builtin.Fn(args...)
 	}
 
-	// Check for ObjectMap with __call__ (e.g., Date, Map, Set)
+	// Check for ObjectMap with __call__ (e.g., Date, Map, Set, Proxy)
 	if objMap, ok := classObj.(*object.ObjectMap); ok {
+		// Special handling for Proxy
+		if isProxyConstructor(objMap) {
+			return createProxy(args)
+		}
 		if callFn, ok := objMap.Get("__call__"); ok {
 			if builtin, ok := callFn.(*object.Builtin); ok {
 				return builtin.Fn(args...)

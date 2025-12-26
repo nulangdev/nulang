@@ -70,6 +70,7 @@ const (
 	QUESTION  TokenType = "?"
 	ARROW     TokenType = "=>"
 	SPREAD    TokenType = "..."
+	AT        TokenType = "@"
 
 	LPAREN   TokenType = "("
 	RPAREN   TokenType = ")"

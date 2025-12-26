@@ -393,6 +393,12 @@ func initBuiltins() {
 
 	// Error constructor
 	builtins["Error"] = initErrorConstructor()
+
+	// Reflect API
+	builtins["Reflect"] = initReflect()
+
+	// Proxy constructor
+	builtins["Proxy"] = initProxy()
 }
 
 func stringify(obj object.Object) string {

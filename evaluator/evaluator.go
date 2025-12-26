@@ -95,7 +95,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.SpreadExpression:
 		return Eval(node.Value, env)
 	case *ast.ClassDeclaration:
-		return evalClassDeclaration(node, env)
+		return evalDecoratedClass(node, env)
 	case *ast.SuperExpression:
 		return evalSuperExpression(node, env)
 	case *ast.InterfaceDeclaration:
