@@ -2,12 +2,17 @@ package evaluator
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/nulang/nulang/ast"
 	"github.com/nulang/nulang/object"
 )
 
 func evalPrefixExpression(node *ast.PrefixExpression, env *object.Environment) object.Object {
+	if node.Operator == "delete" {
+		return evalDeleteExpression(node.Right, env)
+	}
+
 	right := Eval(node.Right, env)
 	if isError(right) {
 		return right
@@ -26,6 +31,68 @@ func evalPrefixExpression(node *ast.PrefixExpression, env *object.Environment) o
 		return evalPreDecrement(node.Right, env)
 	default:
 		return newError("unknown operator: %s%s", node.Operator, right.Type())
+	}
+}
+
+// evalDeleteExpression handles the delete operator
+func evalDeleteExpression(node ast.Expression, env *object.Environment) object.Object {
+	switch n := node.(type) {
+	case *ast.MemberExpression:
+		// obj.prop
+		left := Eval(n.Object, env)
+		if isError(left) {
+			return left
+		}
+
+		propName := ""
+		if ident, ok := n.Property.(*ast.Identifier); ok {
+			propName = ident.Value
+		} else {
+			return newError("invalid delete operand")
+		}
+
+		// Handle Proxy
+		if proxy, ok := left.(*ProxyObject); ok {
+			return ProxyDeleteProperty(proxy, propName, nil)
+		}
+
+		if obj, ok := left.(*object.ObjectMap); ok {
+			delete(obj.Pairs, propName)
+			return TRUE
+		}
+		return TRUE
+
+	case *ast.IndexExpression:
+		// obj["prop"]
+		left := Eval(n.Left, env)
+		if isError(left) {
+			return left
+		}
+
+		index := Eval(n.Index, env)
+		if isError(index) {
+			return index
+		}
+		propName := objectToString(index)
+
+		// Handle Proxy
+		if proxy, ok := left.(*ProxyObject); ok {
+			return ProxyDeleteProperty(proxy, propName, nil)
+		}
+
+		if obj, ok := left.(*object.ObjectMap); ok {
+			delete(obj.Pairs, propName)
+			return TRUE
+		}
+		return TRUE
+
+	case *ast.Identifier:
+		// delete variable - Nulang defaults to returning false/undefined for var deletion or we can implement it if needed.
+		// For now, let's treat it as no-op return false (strict mode-ish).
+		return FALSE
+
+	default:
+		return TRUE
 	}
 }
 
@@ -148,6 +215,8 @@ func evalInfixExpression(node *ast.InfixExpression, env *object.Environment) obj
 		return TRUE
 	case node.Operator == "instanceof":
 		return evalInstanceof(left, right)
+	case node.Operator == "in":
+		return evalInOperator(left, right)
 	}
 	return newError("unknown operator: %s %s %s", left.Type(), node.Operator, right.Type())
 }
@@ -230,6 +299,43 @@ func evalInstanceof(left, right object.Object) object.Object {
 	if _, ok := left.(*object.RegExp); ok {
 		if ident, ok := right.(*object.Builtin); ok && ident.Name == "RegExp" {
 			return TRUE
+		}
+	}
+
+	return FALSE
+}
+
+// evalInOperator checks if property exists in object
+func evalInOperator(left, right object.Object) object.Object {
+	propStr := objectToString(left)
+
+	// Check Proxy
+	if proxy, ok := right.(*ProxyObject); ok {
+		return ProxyHas(proxy, propStr, nil)
+	}
+
+	// Check ObjectMap
+	if obj, ok := right.(*object.ObjectMap); ok {
+		current := obj
+		for current != nil {
+			if _, found := current.Get(propStr); found {
+				return TRUE
+			}
+			current = current.Prototype
+		}
+		return FALSE
+	}
+
+	// Check Array
+	if arr, ok := right.(*object.Array); ok {
+		if propStr == "length" {
+			return TRUE
+		}
+		// Indices
+		if idx, err := strconv.Atoi(propStr); err == nil {
+			if idx >= 0 && idx < len(arr.Elements) {
+				return TRUE
+			}
 		}
 	}
 

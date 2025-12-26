@@ -2,6 +2,8 @@
 package evaluator
 
 import (
+	"sort"
+
 	"github.com/nulang/nulang/object"
 )
 
@@ -186,14 +188,19 @@ func ProxyApply(proxy *ProxyObject, thisArg object.Object, args []object.Object,
 }
 
 // ProxyConstruct handles new operator on a proxy
-func ProxyConstruct(proxy *ProxyObject, args []object.Object, env *object.Environment) object.Object {
+func ProxyConstruct(proxy *ProxyObject, args []object.Object, newTarget object.Object, env *object.Environment) object.Object {
 	if proxy.Revoked {
 		return newError("Cannot perform 'construct' on a proxy that has been revoked")
 	}
 
+	targetNew := newTarget
+	if targetNew == nil {
+		targetNew = proxy
+	}
+
 	if proxy.Handler.Construct != nil {
 		argsArray := &object.Array{Elements: args}
-		return applyProxyTrap(proxy.Handler.Construct, []object.Object{proxy.Target, argsArray, proxy}, env)
+		return applyProxyTrap(proxy.Handler.Construct, []object.Object{proxy.Target, argsArray, targetNew}, env)
 	}
 
 	// Default behavior: construct using target
@@ -202,6 +209,150 @@ func ProxyConstruct(proxy *ProxyObject, args []object.Object, env *object.Enviro
 	}
 
 	return newError("proxy target is not a constructor")
+}
+
+// ProxyGetPrototypeOf handles Object.getPrototypeOf on a proxy
+func ProxyGetPrototypeOf(proxy *ProxyObject, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'getPrototypeOf' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.GetPrototypeOf != nil {
+		return applyProxyTrap(proxy.Handler.GetPrototypeOf, []object.Object{proxy.Target}, env)
+	}
+
+	// Default behavior
+	if objMap, ok := proxy.Target.(*object.ObjectMap); ok {
+		if objMap.Prototype != nil {
+			return objMap.Prototype
+		}
+	}
+	return NULL
+}
+
+// ProxySetPrototypeOf handles Object.setPrototypeOf on a proxy
+func ProxySetPrototypeOf(proxy *ProxyObject, prototype object.Object, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'setPrototypeOf' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.SetPrototypeOf != nil {
+		return applyProxyTrap(proxy.Handler.SetPrototypeOf, []object.Object{proxy.Target, prototype}, env)
+	}
+
+	// Default behavior
+	if objMap, ok := proxy.Target.(*object.ObjectMap); ok {
+		if protoMap, ok := prototype.(*object.ObjectMap); ok {
+			objMap.Prototype = protoMap
+			return TRUE
+		}
+		if prototype.Type() == object.NULL_OBJ {
+			objMap.Prototype = nil
+			return TRUE
+		}
+	}
+	return FALSE
+}
+
+// ProxyIsExtensible handles Object.isExtensible on a proxy
+func ProxyIsExtensible(proxy *ProxyObject, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'isExtensible' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.IsExtensible != nil {
+		return applyProxyTrap(proxy.Handler.IsExtensible, []object.Object{proxy.Target}, env)
+	}
+
+	// Default behavior
+	return TRUE
+}
+
+// ProxyPreventExtensions handles Object.preventExtensions on a proxy
+func ProxyPreventExtensions(proxy *ProxyObject, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'preventExtensions' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.PreventExtensions != nil {
+		return applyProxyTrap(proxy.Handler.PreventExtensions, []object.Object{proxy.Target}, env)
+	}
+
+	// Default behavior
+	return TRUE
+}
+
+// ProxyGetOwnPropertyDescriptor handles Object.getOwnPropertyDescriptor on a proxy
+func ProxyGetOwnPropertyDescriptor(proxy *ProxyObject, property string, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'getOwnPropertyDescriptor' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.GetOwnPropertyDescriptor != nil {
+		propObj := &object.String{Value: property}
+		return applyProxyTrap(proxy.Handler.GetOwnPropertyDescriptor, []object.Object{proxy.Target, propObj}, env)
+	}
+
+	// Default behavior
+	if objMap, ok := proxy.Target.(*object.ObjectMap); ok {
+		if val, found := objMap.Get(property); found {
+			descriptor := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+			descriptor.Set("value", val)
+			descriptor.Set("writable", TRUE)
+			descriptor.Set("enumerable", TRUE)
+			descriptor.Set("configurable", TRUE)
+			return descriptor
+		}
+	}
+	return UNDEFINED
+}
+
+// ProxyDefineProperty handles Object.defineProperty on a proxy
+func ProxyDefineProperty(proxy *ProxyObject, property string, descriptor object.Object, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'defineProperty' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.DefineProperty != nil {
+		propObj := &object.String{Value: property}
+		return applyProxyTrap(proxy.Handler.DefineProperty, []object.Object{proxy.Target, propObj, descriptor}, env)
+	}
+
+	// Default behavior
+	if objMap, ok := proxy.Target.(*object.ObjectMap); ok {
+		if descMap, ok := descriptor.(*object.ObjectMap); ok {
+			if val, found := descMap.Get("value"); found {
+				objMap.Set(property, val)
+				return TRUE
+			}
+		}
+	}
+	return FALSE
+}
+
+// ProxyOwnKeys handles Object.keys / Object.getOwnPropertyNames on a proxy
+func ProxyOwnKeys(proxy *ProxyObject, env *object.Environment) object.Object {
+	if proxy.Revoked {
+		return newError("Cannot perform 'ownKeys' on a proxy that has been revoked")
+	}
+
+	if proxy.Handler.OwnKeys != nil {
+		return applyProxyTrap(proxy.Handler.OwnKeys, []object.Object{proxy.Target}, env)
+	}
+
+	// Default behavior
+	keys := []object.Object{}
+	if objMap, ok := proxy.Target.(*object.ObjectMap); ok {
+		keyNames := make([]string, 0, len(objMap.Pairs))
+		for key := range objMap.Pairs {
+			keyNames = append(keyNames, key)
+		}
+		sort.Strings(keyNames)
+		for _, key := range keyNames {
+			keys = append(keys, &object.String{Value: key})
+		}
+	}
+	return &object.Array{Elements: keys}
 }
 
 // applyProxyTrap applies a proxy trap function

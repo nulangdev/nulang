@@ -103,6 +103,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.INCREMENT, p.parsePrefixExpression)
 	p.registerPrefix(token.DECREMENT, p.parsePrefixExpression)
 	p.registerPrefix(token.TYPEOF, p.parseTypeofExpression)
+	p.registerPrefix(token.DELETE, p.parsePrefixExpression)
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
 	p.registerPrefix(token.IF, p.parseIfExpression)
 	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)

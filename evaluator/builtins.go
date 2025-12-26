@@ -206,6 +206,9 @@ func initBuiltins() {
 		if len(args) < 1 {
 			return &object.Array{Elements: []object.Object{}}
 		}
+		if proxy, ok := args[0].(*ProxyObject); ok {
+			return ProxyOwnKeys(proxy, nil)
+		}
 		if obj, ok := args[0].(*object.ObjectMap); ok {
 			keys := make([]object.Object, 0, len(obj.Pairs))
 			for key := range obj.Pairs {
@@ -219,6 +222,17 @@ func initBuiltins() {
 		if len(args) < 1 {
 			return &object.Array{Elements: []object.Object{}}
 		}
+		if proxy, ok := args[0].(*ProxyObject); ok {
+			keysObj := ProxyOwnKeys(proxy, nil)
+			keysArr, _ := keysObj.(*object.Array)
+			values := []object.Object{}
+			for _, key := range keysArr.Elements {
+				if keyStr, ok := key.(*object.String); ok {
+					values = append(values, ProxyGet(proxy, keyStr.Value, nil))
+				}
+			}
+			return &object.Array{Elements: values}
+		}
 		if obj, ok := args[0].(*object.ObjectMap); ok {
 			values := make([]object.Object, 0, len(obj.Pairs))
 			for _, pair := range obj.Pairs {
@@ -231,6 +245,19 @@ func initBuiltins() {
 	objectObj.Set("entries", &object.Builtin{Name: "entries", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {
 			return &object.Array{Elements: []object.Object{}}
+		}
+		if proxy, ok := args[0].(*ProxyObject); ok {
+			keysObj := ProxyOwnKeys(proxy, nil)
+			keysArr, _ := keysObj.(*object.Array)
+			entries := []object.Object{}
+			for _, key := range keysArr.Elements {
+				if keyStr, ok := key.(*object.String); ok {
+					val := ProxyGet(proxy, keyStr.Value, nil)
+					entry := &object.Array{Elements: []object.Object{key, val}}
+					entries = append(entries, entry)
+				}
+			}
+			return &object.Array{Elements: entries}
 		}
 		if obj, ok := args[0].(*object.ObjectMap); ok {
 			entries := make([]object.Object, 0, len(obj.Pairs))

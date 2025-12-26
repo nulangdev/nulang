@@ -35,6 +35,20 @@ func evalCallExpression(ce *ast.CallExpression, env *object.Environment) object.
 func evalExpressions(exps []ast.Expression, env *object.Environment) []object.Object {
 	var result []object.Object
 	for _, e := range exps {
+		if spread, ok := e.(*ast.SpreadExpression); ok {
+			val := Eval(spread.Value, env)
+			if isError(val) {
+				return []object.Object{val}
+			}
+			if arr, ok := val.(*object.Array); ok {
+				result = append(result, arr.Elements...)
+			} else {
+				// If not an array, treat as single value or iterator (not supported yet)
+				result = append(result, val)
+			}
+			continue
+		}
+
 		evaluated := Eval(e, env)
 		if isError(evaluated) {
 			return []object.Object{evaluated}
@@ -56,6 +70,8 @@ func applyFunction(fn object.Object, args []object.Object) object.Object {
 		if call, ok := fn.Get("__call__"); ok {
 			return applyFunction(call, args)
 		}
+	case *ProxyObject:
+		return ProxyApply(fn, UNDEFINED, args, nil)
 	}
 	return newError("not a function: %s", fn.Type())
 }

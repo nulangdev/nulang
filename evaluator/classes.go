@@ -403,6 +403,11 @@ func evalNewExpressionWithClass(ne *ast.NewExpression, env *object.Environment) 
 		return createClassInstance(class, args, env)
 	}
 
+	// Check if it's a Proxy (as valid constructor)
+	if proxy, ok := classObj.(*ProxyObject); ok {
+		return ProxyConstruct(proxy, args, nil, env)
+	}
+
 	// Check if it's a builtin constructor (e.g., RegExp)
 	if builtin, ok := classObj.(*object.Builtin); ok {
 		return builtin.Fn(args...)

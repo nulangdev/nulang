@@ -134,6 +134,11 @@ func initReflect() *object.ObjectMap {
 
 			propStr := objectToString(property)
 
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyDeleteProperty(proxy, propStr, nil)
+			}
+
 			if objMap, ok := target.(*object.ObjectMap); ok {
 				delete(objMap.Pairs, propStr)
 				return TRUE
@@ -151,6 +156,11 @@ func initReflect() *object.ObjectMap {
 				return newError("Reflect.ownKeys requires 1 argument")
 			}
 			target := args[0]
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyOwnKeys(proxy, nil)
+			}
 
 			keys := []object.Object{}
 
@@ -185,6 +195,11 @@ func initReflect() *object.ObjectMap {
 				fnArgs = arr.Elements
 			}
 
+			// Check if target is a Proxy
+			if proxy, ok := fn.(*ProxyObject); ok {
+				return ProxyApply(proxy, thisArg, fnArgs, nil)
+			}
+
 			switch function := fn.(type) {
 			case *object.Function:
 				env := object.NewEnclosedEnvironment(function.Env)
@@ -217,10 +232,19 @@ func initReflect() *object.ObjectMap {
 			}
 			target := args[0]
 			argList := args[1]
+			var newTarget object.Object = nil
+			if len(args) > 2 {
+				newTarget = args[2]
+			}
 
 			fnArgs := []object.Object{}
 			if arr, ok := argList.(*object.Array); ok {
 				fnArgs = arr.Elements
+			}
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyConstruct(proxy, fnArgs, newTarget, nil)
 			}
 
 			// Check if it's a Class
@@ -257,6 +281,11 @@ func initReflect() *object.ObjectMap {
 			}
 			target := args[0]
 
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyGetPrototypeOf(proxy, nil)
+			}
+
 			if objMap, ok := target.(*object.ObjectMap); ok {
 				if objMap.Prototype != nil {
 					return objMap.Prototype
@@ -276,6 +305,11 @@ func initReflect() *object.ObjectMap {
 			}
 			target := args[0]
 			prototype := args[1]
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxySetPrototypeOf(proxy, prototype, nil)
+			}
 
 			if objMap, ok := target.(*object.ObjectMap); ok {
 				if protoMap, ok := prototype.(*object.ObjectMap); ok {
@@ -299,6 +333,13 @@ func initReflect() *object.ObjectMap {
 			if len(args) < 1 {
 				return newError("Reflect.isExtensible requires 1 argument")
 			}
+			target := args[0]
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyIsExtensible(proxy, nil)
+			}
+
 			// In our implementation, objects are always extensible unless frozen
 			return TRUE
 		},
@@ -311,6 +352,13 @@ func initReflect() *object.ObjectMap {
 			if len(args) < 1 {
 				return newError("Reflect.preventExtensions requires 1 argument")
 			}
+			target := args[0]
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyPreventExtensions(proxy, nil)
+			}
+
 			// We'll just return true; proper implementation would need object flags
 			return TRUE
 		},
@@ -327,6 +375,11 @@ func initReflect() *object.ObjectMap {
 			property := args[1]
 
 			propStr := objectToString(property)
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyGetOwnPropertyDescriptor(proxy, propStr, nil)
+			}
 
 			if objMap, ok := target.(*object.ObjectMap); ok {
 				if val, found := objMap.Get(propStr); found {
@@ -355,6 +408,11 @@ func initReflect() *object.ObjectMap {
 			descriptor := args[2]
 
 			propStr := objectToString(property)
+
+			// Check if target is a Proxy
+			if proxy, ok := target.(*ProxyObject); ok {
+				return ProxyDefineProperty(proxy, propStr, descriptor, nil)
+			}
 
 			if objMap, ok := target.(*object.ObjectMap); ok {
 				if descMap, ok := descriptor.(*object.ObjectMap); ok {
