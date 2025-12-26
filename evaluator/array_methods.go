@@ -53,7 +53,22 @@ func evalArrayProperty(arr *object.Array, prop string) object.Object {
 			if len(args) < 1 {
 				return FALSE
 			}
-			for _, elem := range arr.Elements {
+			
+			fromIndex := 0
+			if len(args) > 1 {
+				if n, ok := args[1].(*object.Number); ok {
+					fromIndex = int(n.Value)
+				}
+			}
+			if fromIndex < 0 {
+				fromIndex = len(arr.Elements) + fromIndex
+				if fromIndex < 0 {
+					fromIndex = 0
+				}
+			}
+			
+			for i := fromIndex; i < len(arr.Elements); i++ {
+				elem := arr.Elements[i]
 				if evalStrictEquality(elem, args[0]) == TRUE {
 					return TRUE
 				}
@@ -161,11 +176,19 @@ func createArrayIterator(arr *object.Array, method string) *object.Builtin {
 			return newError("%s callback must be a function", method)
 		}
 
+		var thisArg object.Object
+		if len(args) > 1 {
+			thisArg = args[1]
+		}
+
 		switch method {
 		case "map":
 			result := make([]object.Object, len(arr.Elements))
 			for i, elem := range arr.Elements {
 				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
 				result[i] = unwrapReturnValue(Eval(fn.Body, fnEnv))
 			}
 			return &object.Array{Elements: result}
@@ -173,6 +196,9 @@ func createArrayIterator(arr *object.Array, method string) *object.Builtin {
 			var result []object.Object
 			for i, elem := range arr.Elements {
 				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
 				if isTruthy(unwrapReturnValue(Eval(fn.Body, fnEnv))) {
 					result = append(result, elem)
 				}
@@ -181,12 +207,18 @@ func createArrayIterator(arr *object.Array, method string) *object.Builtin {
 		case "forEach":
 			for i, elem := range arr.Elements {
 				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
 				Eval(fn.Body, fnEnv)
 			}
 			return UNDEFINED
 		case "find":
 			for i, elem := range arr.Elements {
 				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
 				if isTruthy(unwrapReturnValue(Eval(fn.Body, fnEnv))) {
 					return elem
 				}
@@ -195,6 +227,9 @@ func createArrayIterator(arr *object.Array, method string) *object.Builtin {
 		case "findIndex":
 			for i, elem := range arr.Elements {
 				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
 				if isTruthy(unwrapReturnValue(Eval(fn.Body, fnEnv))) {
 					return &object.Number{Value: float64(i)}
 				}

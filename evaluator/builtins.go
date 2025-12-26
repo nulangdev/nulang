@@ -173,6 +173,29 @@ func initBuiltins() {
 	
 	// Array constructor
 	arrayObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Constructor for new Array()
+	arrayObj.Set("__call__", &object.Builtin{Name: "Array", Fn: func(args ...object.Object) object.Object {
+		if len(args) == 1 {
+			if num, ok := args[0].(*object.Number); ok {
+				// Array(len)
+				size := int(num.Value)
+				if size < 0 {
+					return newError("Invalid array length")
+				}
+				elements := make([]object.Object, size)
+				for i := 0; i < size; i++ {
+					elements[i] = UNDEFINED
+				}
+				return &object.Array{Elements: elements}
+			}
+		}
+		// Array(element0, element1, ...)
+		elements := make([]object.Object, len(args))
+		copy(elements, args)
+		return &object.Array{Elements: elements}
+	}})
+	
 	arrayObj.Set("isArray", &object.Builtin{Name: "isArray", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {
 			return FALSE
@@ -180,23 +203,71 @@ func initBuiltins() {
 		_, ok := args[0].(*object.Array)
 		return nativeBoolToBooleanObject(ok)
 	}})
+	
 	arrayObj.Set("from", &object.Builtin{Name: "from", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {
 			return &object.Array{Elements: []object.Object{}}
 		}
-		if arr, ok := args[0].(*object.Array); ok {
-			newElements := make([]object.Object, len(arr.Elements))
-			copy(newElements, arr.Elements)
-			return &object.Array{Elements: newElements}
-		}
-		if str, ok := args[0].(*object.String); ok {
-			elements := make([]object.Object, len(str.Value))
-			for i := 0; i < len(str.Value); i++ {
-				elements[i] = &object.String{Value: string(str.Value[i])}
+		
+		var elements []object.Object
+		
+		// 1. Get elements from array-like or iterable
+		switch arg := args[0].(type) {
+		case *object.Array:
+			elements = make([]object.Object, len(arg.Elements))
+			copy(elements, arg.Elements)
+		case *object.String:
+			elements = make([]object.Object, len(arg.Value))
+			for i, r := range arg.Value {
+				elements[i] = &object.String{Value: string(r)}
 			}
-			return &object.Array{Elements: elements}
+		case *object.ObjectMap:
+			// Check for length property
+			if lenProp, ok := arg.Get("length"); ok {
+				if num, ok := lenProp.(*object.Number); ok {
+					l := int(num.Value)
+					if l < 0 { l = 0 }
+					elements = make([]object.Object, l)
+					for i := 0; i < l; i++ {
+						key := fmt.Sprintf("%d", i)
+						if val, ok := arg.Get(key); ok {
+							elements[i] = val
+						} else {
+							elements[i] = UNDEFINED
+						}
+					}
+				} else {
+					elements = []object.Object{}
+				}
+			} else {
+				// Not array-like (no length), return empty array
+				elements = []object.Object{}
+			}
+		default:
+			elements = []object.Object{}
 		}
-		return &object.Array{Elements: []object.Object{}}
+		
+		// 2. Map function and thisArg
+		if len(args) > 1 {
+			if mapFn, ok := args[1].(*object.Function); ok {
+				var thisArg object.Object
+				if len(args) > 2 {
+					thisArg = args[2]
+				}
+				
+				mappedElements := make([]object.Object, len(elements))
+				for i, elem := range elements {
+					fnEnv := extendFunctionEnv(mapFn, []object.Object{elem, &object.Number{Value: float64(i)}})
+					if thisArg != nil {
+						fnEnv.Set("this", thisArg)
+					}
+					mappedElements[i] = unwrapReturnValue(Eval(mapFn.Body, fnEnv))
+				}
+				elements = mappedElements
+			}
+		}
+		
+		return &object.Array{Elements: elements}
 	}})
 	builtins["Array"] = arrayObj
 	
