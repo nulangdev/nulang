@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
-	"time"
 
 	"github.com/nulang/nulang/evaluator"
 	"github.com/nulang/nulang/lexer"
@@ -54,13 +51,13 @@ func main() {
 	// Run file (with or without watch)
 	if filename != "" {
 		if watchMode {
-			runWithWatch(filename)
+			RunWithWatchV2(filename)
 		} else {
 			runFile(filename)
 		}
 	} else if len(os.Args) > 1 && !isCommand(os.Args[1]) {
 		if watchMode {
-			runWithWatch(os.Args[1])
+			RunWithWatchV2(os.Args[1])
 		} else {
 			runFile(os.Args[1])
 		}
@@ -75,109 +72,6 @@ func isCommand(arg string) bool {
 		}
 	}
 	return false
-}
-
-func runWithWatch(filename string) {
-	fmt.Printf("\033[1;36mWatch mode enabled for: %s\033[0m\n", filename)
-	fmt.Println("\033[1;33mPress Ctrl+C to stop\033[0m")
-	fmt.Println()
-
-	// Handle Ctrl+C gracefully
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// Get initial file info
-	lastModTime, err := getModTime(filename)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\033[1;31mError: %s\033[0m\n", err)
-		os.Exit(1)
-	}
-
-	// Run initially
-	runFileWithRecover(filename)
-
-	// Watch loop
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-sigChan:
-			fmt.Println("\n\033[1;33mWatch mode stopped\033[0m")
-			return
-		case <-ticker.C:
-			currentModTime, err := getModTime(filename)
-			if err != nil {
-				continue
-			}
-
-			if currentModTime.After(lastModTime) {
-				lastModTime = currentModTime
-				clearScreen()
-				fmt.Printf("\033[1;32mFile changed at %s\033[0m\n", time.Now().Format("15:04:05"))
-				fmt.Println("\033[1;90m" + "─────────────────────────────────────" + "\033[0m")
-				runFileWithRecover(filename)
-			}
-		}
-	}
-}
-
-func getModTime(filename string) (time.Time, error) {
-	info, err := os.Stat(filename)
-	if err != nil {
-		return time.Time{}, err
-	}
-	return info.ModTime(), nil
-}
-
-func clearScreen() {
-	fmt.Print("\033[H\033[2J")
-}
-
-func runFileWithRecover(filename string) {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Fprintf(os.Stderr, "\033[1;31mPanic recovered: %v\033[0m\n", r)
-		}
-	}()
-
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "\033[1;31mError reading file: %s\033[0m\n", err)
-		return
-	}
-
-	// Set current module path for relative imports
-	absPath, err := filepath.Abs(filename)
-	if err != nil {
-		absPath = filename
-	}
-	evaluator.CurrentModulePath = absPath
-
-	env := object.NewEnvironment()
-	setupGlobalEnv(env)
-	
-	// Add __filename and __dirname
-	env.Set("__filename", &object.String{Value: absPath})
-	env.Set("__dirname", &object.String{Value: filepath.Dir(absPath)})
-
-	l := lexer.New(string(content))
-	p := parser.New(l)
-	program := p.ParseProgram()
-
-	if len(p.Errors()) > 0 {
-		printParserErrors(os.Stderr, p.Errors())
-		return
-	}
-
-	result := evaluator.Eval(program, env)
-
-	if result != nil && result.Type() == object.ERROR_OBJ {
-		fmt.Fprintf(os.Stderr, "\033[1;31m%s\033[0m\n", result.Inspect())
-	}
-
-	fmt.Println("\033[1;90m" + "─────────────────────────────────────" + "\033[0m")
-	fmt.Println("\033[1;90mWaiting for changes...\033[0m")
 }
 
 func handleInstall() {
@@ -266,7 +160,7 @@ func runFile(filename string) {
 }
 
 func startREPL() {
-	fmt.Printf("Nulang v%s - JavaScript-like language written in Go\n", VERSION)
+	fmt.Printf("Nulang v%s\n", VERSION)
 	fmt.Println("Type 'exit' to quit, 'help' for more info")
 	fmt.Println()
 

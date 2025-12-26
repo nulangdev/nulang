@@ -21,3 +21,9 @@ func UnregisterAsyncTask() {
 func AwaitAsyncTasks() {
 	eventLoopWg.Wait()
 }
+
+// ResetAsyncTasks resets the async task counter for watch mode restarts
+// This creates a new WaitGroup to start fresh
+func ResetAsyncTasks() {
+	eventLoopWg = sync.WaitGroup{}
+}

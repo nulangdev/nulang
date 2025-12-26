@@ -317,8 +317,27 @@ func createHttpClasses() {
 	}
 }
 
+// ServerCreatedCallback is called when a new server is created (for watch mode tracking)
+var ServerCreatedCallback func(*object.ObjectMap)
+
+// WrapHttpCreateServer sets a callback function that gets called when HTTP servers are created
+// This is used by watch mode to track and cleanup servers on restart
+func WrapHttpCreateServer(callback func(*object.ObjectMap)) func(args ...object.Object) object.Object {
+	ServerCreatedCallback = callback
+	return httpCreateServer
+}
+
 func httpCreateServer(args ...object.Object) object.Object {
-	return createClassInstance(httpServerClass, args, httpServerClass.Env)
+	instance := createClassInstance(httpServerClass, args, httpServerClass.Env)
+	
+	// Notify watch mode if callback is set
+	if ServerCreatedCallback != nil {
+		if objMap, ok := instance.(*object.ObjectMap); ok {
+			ServerCreatedCallback(objMap)
+		}
+	}
+	
+	return instance
 }
 
 func createIncomingMessage(r *http.Request) *object.ObjectMap {

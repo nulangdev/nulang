@@ -18,6 +18,13 @@ var moduleCacheMutex sync.RWMutex
 // CurrentModulePath tracks the current module being evaluated
 var CurrentModulePath string = ""
 
+// ClearModuleCache clears the module cache for watch mode restarts
+func ClearModuleCache() {
+	moduleCacheMutex.Lock()
+	defer moduleCacheMutex.Unlock()
+	moduleCache = make(map[string]*object.ObjectMap)
+}
+
 // getBuiltinModule returns a builtin module by name if it exists
 func getBuiltinModule(name string) (*object.ObjectMap, bool) {
 	switch name {
