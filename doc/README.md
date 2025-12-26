@@ -55,17 +55,36 @@ Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Nod
 
 ### Rede
 
-| Módulo            | Descrição                                        |
-| ----------------- | ------------------------------------------------ |
-| [HTTP](./http.md) | Cliente e servidor HTTP, fetch, url, querystring |
+| Módulo              | Descrição                                        |
+| ------------------- | ------------------------------------------------ |
+| [HTTP](./http.md)   | Cliente e servidor HTTP, fetch, url, querystring |
+| [Net](./net.md)     | Servidores e clientes TCP                        |
+| [Dgram](./dgram.md) | Sockets UDP                                      |
+| [DNS](./dns.md)     | Resolução de nomes de domínio                    |
 
 ### Sistema
 
-| Módulo                  | Descrição                          |
-| ----------------------- | ---------------------------------- |
-| [Process](./process.md) | Objeto global process              |
-| [OS](./os.md)           | Informações do sistema operacional |
-| [Crypto](./crypto.md)   | Funções criptográficas             |
+| Módulo                              | Descrição                          |
+| ----------------------------------- | ---------------------------------- |
+| [Process](./process.md)             | Objeto global process              |
+| [OS](./os.md)                       | Informações do sistema operacional |
+| [Crypto](./crypto.md)               | Funções criptográficas             |
+| [Child Process](./child_process.md) | Execução de processos filhos       |
+| [Zlib](./zlib.md)                   | Compressão e descompressão         |
+| [VM](./vm.md)                       | Execução de código em sandbox      |
+
+### Entrada/Saída Interativa
+
+| Módulo                    | Descrição                          |
+| ------------------------- | ---------------------------------- |
+| [Readline](./readline.md) | Leitura de entrada linha por linha |
+
+### Utilitários e Testes
+
+| Módulo                | Descrição                        |
+| --------------------- | -------------------------------- |
+| [Util](./util.md)     | Funções utilitárias e formatação |
+| [Assert](./assert.md) | Funções de asserção para testes  |
 
 ### Metaprogramação
 
@@ -232,6 +251,15 @@ const stream = require("stream");
 const url = require("url");
 const querystring = require("querystring");
 const events = require("events");
+const net = require("net");
+const dgram = require("dgram");
+const dns = require("dns");
+const child_process = require("child_process");
+const readline = require("readline");
+const vm = require("vm");
+const zlib = require("zlib");
+const assert = require("assert");
+const util = require("util");
 ```
 
 ---

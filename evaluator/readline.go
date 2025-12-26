@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/nulang/nulang/object"
 )
@@ -34,12 +35,32 @@ func initReadlineModule() *object.ObjectMap {
 			promptStr = objectToString(ps)
 		}
 
+		// Control channel and state for the readline interface
+		closeChan := make(chan struct{})
+		var closed bool
+		var closeMutex sync.Mutex
+		var paused bool
+		var pauseMutex sync.Mutex
+
 		rl.Set("prompt", &object.Builtin{Name: "prompt", Fn: func(args ...object.Object) object.Object {
+			closeMutex.Lock()
+			isClosed := closed
+			closeMutex.Unlock()
+			if isClosed {
+				return UNDEFINED
+			}
 			fmt.Print(promptStr)
 			return UNDEFINED
 		}})
 
 		rl.Set("question", &object.Builtin{Name: "question", Fn: func(args ...object.Object) object.Object {
+			closeMutex.Lock()
+			isClosed := closed
+			closeMutex.Unlock()
+			if isClosed {
+				return &object.String{Value: ""}
+			}
+
 			if len(args) < 1 {
 				return newError("question requires a query string")
 			}
@@ -69,16 +90,32 @@ func initReadlineModule() *object.ObjectMap {
 		}})
 
 		rl.Set("close", &object.Builtin{Name: "close", Fn: func(args ...object.Object) object.Object {
+			closeMutex.Lock()
+			if closed {
+				closeMutex.Unlock()
+				return UNDEFINED
+			}
+			closed = true
+			closeMutex.Unlock()
+
+			close(closeChan)
 			emitEvent(rl, "close")
+			UnregisterAsyncTask() // Allow program to exit
 			return UNDEFINED
 		}})
 
 		rl.Set("pause", &object.Builtin{Name: "pause", Fn: func(args ...object.Object) object.Object {
+			pauseMutex.Lock()
+			paused = true
+			pauseMutex.Unlock()
 			emitEvent(rl, "pause")
 			return UNDEFINED
 		}})
 
 		rl.Set("resume", &object.Builtin{Name: "resume", Fn: func(args ...object.Object) object.Object {
+			pauseMutex.Lock()
+			paused = false
+			pauseMutex.Unlock()
 			emitEvent(rl, "resume")
 			return UNDEFINED
 		}})
@@ -98,14 +135,51 @@ func initReadlineModule() *object.ObjectMap {
 			return UNDEFINED
 		}})
 
+		// Register async task to keep program running
+		RegisterAsyncTask()
+
 		// Start reading lines in background
 		go func() {
 			for {
+				// Check if closed
+				closeMutex.Lock()
+				isClosed := closed
+				closeMutex.Unlock()
+				if isClosed {
+					return
+				}
+
+				// Check if paused
+				pauseMutex.Lock()
+				isPaused := paused
+				pauseMutex.Unlock()
+				if isPaused {
+					// Wait a bit before checking again
+					select {
+					case <-closeChan:
+						return
+					default:
+						continue
+					}
+				}
+
 				line, err := reader.ReadString('\n')
 				if err != nil {
-					emitEvent(rl, "close")
-					break
+					// Check if interface was closed intentionally
+					closeMutex.Lock()
+					isClosed := closed
+					closeMutex.Unlock()
+					if !isClosed {
+						closeMutex.Lock()
+						closed = true
+						closeMutex.Unlock()
+						close(closeChan)
+						emitEvent(rl, "close")
+						UnregisterAsyncTask() // Allow program to exit
+					}
+					return
 				}
+
 				line = strings.TrimSpace(line)
 				emitEvent(rl, "line", &object.String{Value: line})
 			}
