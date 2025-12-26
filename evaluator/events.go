@@ -27,6 +27,9 @@ func createEventEmitterClass() {
 		Env:           object.NewEnvironment(), // Empty environment
 	}
 
+	// Static property: defaultMaxListeners
+	eventEmitterClass.Static["defaultMaxListeners"] = &object.Number{Value: 10}
+
 	// constructor
 	eventEmitterClass.NativeMethods["constructor"] = func(this object.Object, args ...object.Object) object.Object {
 		instance, ok := this.(*object.ObjectMap)
@@ -35,40 +38,132 @@ func createEventEmitterClass() {
 		}
 		// Initialize _events map
 		instance.Set("_events", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
+		instance.Set("_maxListeners", UNDEFINED)
 		return UNDEFINED
 	}
 
 	// on(event, listener)
 	eventEmitterClass.NativeMethods["on"] = func(this object.Object, args ...object.Object) object.Object {
-		if len(args) < 2 {
-			return this
-		}
-		instance := this.(*object.ObjectMap)
-		eventName := objectToString(args[0])
-		listener := args[1]
-
-		ensureEventsMap(instance)
-		events, _ := instance.Get("_events")
-		eventsMap := events.(*object.ObjectMap)
-
-		var listeners *object.Array
-		if existing, ok := eventsMap.Get(eventName); ok {
-			if arr, ok := existing.(*object.Array); ok {
-				listeners = arr
-			}
-		}
-
-		if listeners == nil {
-			listeners = &object.Array{Elements: []object.Object{}}
-		}
-		listeners.Elements = append(listeners.Elements, listener)
-		eventsMap.Set(eventName, listeners)
-
-		return this
+		return addListener(this, args, false)
 	}
 
 	// addListener alias
 	eventEmitterClass.NativeMethods["addListener"] = eventEmitterClass.NativeMethods["on"]
+
+	// prependListener(event, listener)
+	eventEmitterClass.NativeMethods["prependListener"] = func(this object.Object, args ...object.Object) object.Object {
+		return addListener(this, args, true)
+	}
+
+	// once(event, listener)
+	eventEmitterClass.NativeMethods["once"] = func(this object.Object, args ...object.Object) object.Object {
+		return addOnceListener(this, args, false)
+	}
+
+	// prependOnceListener(event, listener)
+	eventEmitterClass.NativeMethods["prependOnceListener"] = func(this object.Object, args ...object.Object) object.Object {
+		return addOnceListener(this, args, true)
+	}
+
+	// off alias for removeListener
+	eventEmitterClass.NativeMethods["off"] = func(this object.Object, args ...object.Object) object.Object {
+		return removeListenerMethod(this, args)
+	}
+
+	// removeListener(event, listener)
+	eventEmitterClass.NativeMethods["removeListener"] = func(this object.Object, args ...object.Object) object.Object {
+		return removeListenerMethod(this, args)
+	}
+
+	// removeAllListeners([event])
+	eventEmitterClass.NativeMethods["removeAllListeners"] = func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		eventsObj, ok := instance.Get("_events")
+		if !ok {
+			return this
+		}
+		eventsMap := eventsObj.(*object.ObjectMap)
+
+		if len(args) == 0 {
+			// Remove all
+			instance.Set("_events", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
+		} else {
+			eventName := objectToString(args[0])
+			if _, ok := eventsMap.Get(eventName); ok {
+				eventsMap.Pairs[eventName] = object.ObjectPair{Key: &object.String{Value: eventName}, Value: &object.Array{Elements: []object.Object{}}}
+				delete(eventsMap.Pairs, eventName)
+			}
+		}
+
+		return this
+	}
+
+	// setMaxListeners(n)
+	eventEmitterClass.NativeMethods["setMaxListeners"] = func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return this
+		}
+		instance := this.(*object.ObjectMap)
+		instance.Set("_maxListeners", args[0])
+		return this
+	}
+
+	// getMaxListeners()
+	eventEmitterClass.NativeMethods["getMaxListeners"] = func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		if max, ok := instance.Get("_maxListeners"); ok && max != UNDEFINED {
+			return max
+		}
+		// Return default
+		if def, ok := eventEmitterClass.Static["defaultMaxListeners"]; ok {
+			return def
+		}
+		return &object.Number{Value: 10}
+	}
+
+	// listeners(event)
+	eventEmitterClass.NativeMethods["listeners"] = func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return &object.Array{Elements: []object.Object{}}
+		}
+		return getListeners(this, args[0], true) // true = unwrap
+	}
+
+	// rawListeners(event)
+	eventEmitterClass.NativeMethods["rawListeners"] = func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return &object.Array{Elements: []object.Object{}}
+		}
+		return getListeners(this, args[0], false) // false = keep wrappers
+	}
+
+	// listenerCount(event)
+	eventEmitterClass.NativeMethods["listenerCount"] = func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return &object.Number{Value: 0}
+		}
+		list := getListeners(this, args[0], false)
+		if arr, ok := list.(*object.Array); ok {
+			return &object.Number{Value: float64(len(arr.Elements))}
+		}
+		return &object.Number{Value: 0}
+	}
+
+	// eventNames()
+	eventEmitterClass.NativeMethods["eventNames"] = func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		ensureEventsMap(instance)
+		events, _ := instance.Get("_events")
+		eventsMap := events.(*object.ObjectMap)
+
+		names := &object.Array{Elements: []object.Object{}}
+		for _, pair := range eventsMap.Pairs {
+			if arr, ok := pair.Value.(*object.Array); ok && len(arr.Elements) > 0 {
+				names.Elements = append(names.Elements, pair.Key)
+			}
+		}
+		return names
+	}
 
 	// emit(event, ...args)
 	eventEmitterClass.NativeMethods["emit"] = func(this object.Object, args ...object.Object) object.Object {
@@ -79,17 +174,35 @@ func createEventEmitterClass() {
 		eventName := objectToString(args[0])
 		emitArgs := args[1:]
 
+		// Handle 'error' event specifically
+		if eventName == "error" {
+			hasListeners := checkHasListeners(instance, "error")
+			if !hasListeners {
+				// Throw error
+				var err object.Object
+				if len(emitArgs) > 0 {
+					err = emitArgs[0]
+				} else {
+					err = newError("Unhandled 'error' event")
+				}
+				if errObj, ok := err.(*object.Error); ok {
+					return errObj
+				}
+				return newError("Unhandled 'error' event: %s", err.Inspect())
+			}
+		}
+
 		events, ok := instance.Get("_events")
 		if !ok {
 			return FALSE
 		}
 		eventsMap := events.(*object.ObjectMap)
-		
+
 		listenersObj, ok := eventsMap.Get(eventName)
 		if !ok {
-			return FALSE // No listeners
+			return FALSE
 		}
-		
+
 		listenersArr, ok := listenersObj.(*object.Array)
 		if !ok || len(listenersArr.Elements) == 0 {
 			return FALSE
@@ -100,73 +213,185 @@ func createEventEmitterClass() {
 		copy(listenersCopy, listenersArr.Elements)
 
 		for _, handler := range listenersCopy {
-			// Call handler
 			applyHandler(handler, emitArgs)
 		}
-		
+
 		return TRUE
 	}
-    
-    // once(event, listener)
-    eventEmitterClass.NativeMethods["once"] = func(this object.Object, args ...object.Object) object.Object {
-        if len(args) < 2 {
-            return this
-        }
-        instance := this.(*object.ObjectMap)
-        eventName := objectToString(args[0])
-        originalListener := args[1]
-        
-        // We need to create a wrapper function that calls 'off' then 'original'
-        // Since we are in Go, we create a Builtin closure
-        var wrapper *object.Builtin
-        wrapper = &object.Builtin{
-            Fn: func(wArgs ...object.Object) object.Object {
-                // Remove self (wrapper)
-                removeListener(instance, eventName, wrapper)
-                
-                // Call original
-                return applyHandler(originalListener, wArgs)
-            },
-        }
-        
-        // Add wrapper
-        // Use 'on' method logic directly or call 'on'?
-        // Calling 'on' is safer
-        if onMethod, ok := instance.Get("on"); ok {
-             if builtin, ok := onMethod.(*object.Builtin); ok {
-                 builtin.Fn(&object.String{Value: eventName}, wrapper)
-             }
-        }
-        
-        return this
-    }
+}
 
-    // removeListener(event, listener)
-    eventEmitterClass.NativeMethods["removeListener"] = func(this object.Object, args ...object.Object) object.Object {
-        if len(args) < 2 {
-            return this
-        }
-        instance := this.(*object.ObjectMap)
-        eventName := objectToString(args[0])
-        target := args[1]
-        
-        removeListener(instance, eventName, target)
-        return this
-    }
-    
-    // removeAllListeners
-    eventEmitterClass.NativeMethods["removeAllListeners"] = func(this object.Object, args ...object.Object) object.Object {
-        instance := this.(*object.ObjectMap)
-        if len(args) > 0 {
-            eventName := objectToString(args[0])
-            if events, ok := instance.Get("_events"); ok {
-                events.(*object.ObjectMap).Pairs[eventName] = object.ObjectPair{Key: &object.String{Value:eventName}, Value: &object.Array{Elements: []object.Object{}}} // Clear specific
-            }
-        } else {
-             instance.Set("_events", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
-        }
-        return this
-    }
+// Helpers
+
+func addListener(this object.Object, args []object.Object, prepend bool) object.Object {
+	if len(args) < 2 {
+		return this
+	}
+	instance := this.(*object.ObjectMap)
+	eventName := objectToString(args[0])
+	listener := args[1]
+
+	// Emit 'newListener' before adding
+	if checkHasListeners(instance, "newListener") {
+		emitFn := eventEmitterClass.NativeMethods["emit"]
+		emitFn(this, &object.String{Value: "newListener"}, &object.String{Value: eventName}, listener)
+	}
+
+	ensureEventsMap(instance)
+	events, _ := instance.Get("_events")
+	eventsMap := events.(*object.ObjectMap)
+
+	var listeners *object.Array
+	if existing, ok := eventsMap.Get(eventName); ok {
+		if arr, ok := existing.(*object.Array); ok {
+			listeners = arr
+		}
+	}
+
+	if listeners == nil {
+		listeners = &object.Array{Elements: []object.Object{}}
+		eventsMap.Set(eventName, listeners)
+	}
+
+	if prepend {
+		listeners.Elements = append([]object.Object{listener}, listeners.Elements...)
+	} else {
+		listeners.Elements = append(listeners.Elements, listener)
+	}
+
+	return this
+}
+
+func addOnceListener(this object.Object, args []object.Object, prepend bool) object.Object {
+	if len(args) < 2 {
+		return this
+	}
+	// eventName removed
+	originalListener := args[1]
+
+	wrapper := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	wrapper.Set("listener", originalListener) // Store original for removeListener
+
+	// Wrapper function
+	wrapperFn := func(wArgs ...object.Object) object.Object {
+		// Remove self
+		removeListenerMethod(this, []object.Object{args[0], wrapper})
+		// Call original
+		return applyHandler(originalListener, wArgs)
+	}
+
+	// Make wrapper callable
+	wrapper.Set("__call__", &object.Builtin{Fn: wrapperFn})
+
+	// Add the wrapper
+	return addListener(this, []object.Object{args[0], wrapper}, prepend)
+}
+
+func removeListenerMethod(this object.Object, args []object.Object) object.Object {
+	if len(args) < 2 {
+		return this
+	}
+	instance := this.(*object.ObjectMap)
+	eventName := objectToString(args[0])
+	target := args[1]
+
+	events, ok := instance.Get("_events")
+	if !ok {
+		return this
+	}
+	eventsMap := events.(*object.ObjectMap)
+
+	listenersObj, ok := eventsMap.Get(eventName)
+	if !ok {
+		return this
+	}
+
+	listenersArr, ok := listenersObj.(*object.Array)
+	if !ok {
+		return this
+	}
+
+	newElements := []object.Object{}
+	found := false
+	var removedListener object.Object
+
+	for _, l := range listenersArr.Elements {
+		if found {
+			newElements = append(newElements, l)
+			continue
+		}
+
+		match := false
+		if l == target {
+			match = true
+		} else if lObj, ok := l.(*object.ObjectMap); ok {
+			// Check if it's a wrapper with .listener == target
+			if orig, ok := lObj.Get("listener"); ok && orig == target {
+				match = true
+			}
+		}
+
+		if match {
+			found = true
+			removedListener = l
+			continue
+		}
+		newElements = append(newElements, l)
+	}
+
+	listenersArr.Elements = newElements
+	
+	if len(newElements) == 0 {
+		delete(eventsMap.Pairs, eventName)
+	}
+
+	if found && checkHasListeners(instance, "removeListener") {
+		emitFn := eventEmitterClass.NativeMethods["emit"]
+		emitFn(this, &object.String{Value: "removeListener"}, &object.String{Value: eventName}, removedListener)
+	}
+
+	return this
+}
+
+func getListeners(this object.Object, eventArg object.Object, unwrap bool) object.Object {
+	instance := this.(*object.ObjectMap)
+	eventName := objectToString(eventArg)
+	
+	ensureEventsMap(instance)
+	events, _ := instance.Get("_events")
+	eventsMap := events.(*object.ObjectMap)
+	
+	existing, ok := eventsMap.Get(eventName)
+	if !ok {
+		return &object.Array{Elements: []object.Object{}}
+	}
+	arr, ok := existing.(*object.Array)
+	if !ok {
+		return &object.Array{Elements: []object.Object{}}
+	}
+	
+	result := &object.Array{Elements: make([]object.Object, len(arr.Elements))}
+	for i, l := range arr.Elements {
+		val := l
+		if unwrap {
+			if lObj, ok := l.(*object.ObjectMap); ok {
+				if orig, ok := lObj.Get("listener"); ok {
+					val = orig
+				}
+			}
+		}
+		result.Elements[i] = val
+	}
+	return result
+}
+
+func checkHasListeners(instance *object.ObjectMap, eventName string) bool {
+	events, ok := instance.Get("_events")
+	if !ok { return false }
+	eventsMap := events.(*object.ObjectMap)
+	l, ok := eventsMap.Get(eventName)
+	if !ok { return false }
+	arr, ok := l.(*object.Array)
+	return ok && len(arr.Elements) > 0
 }
 
 func ensureEventsMap(instance *object.ObjectMap) {
@@ -175,36 +400,17 @@ func ensureEventsMap(instance *object.ObjectMap) {
 	}
 }
 
-func removeListener(instance *object.ObjectMap, eventName string, target object.Object) {
-    events, ok := instance.Get("_events")
-    if !ok { return }
-    eventsMap := events.(*object.ObjectMap)
-    
-    listenersObj, ok := eventsMap.Get(eventName)
-    if !ok { return }
-    
-    listenersArr, ok := listenersObj.(*object.Array)
-    if !ok { return }
-    
-    newElements := []object.Object{}
-    found := false
-    for _, l := range listenersArr.Elements {
-        if !found && l == target {
-            found = true
-            continue
-        }
-        newElements = append(newElements, l)
-    }
-    listenersArr.Elements = newElements
-}
-
 func applyHandler(handler object.Object, args []object.Object) object.Object {
-    switch fn := handler.(type) {
-    case *object.Function:
-        env := extendFunctionEnv(fn, args)
-        return Eval(fn.Body, env)
-    case *object.Builtin:
-        return fn.Fn(args...)
-    }
-    return UNDEFINED
+	switch fn := handler.(type) {
+	case *object.Function:
+		env := extendFunctionEnv(fn, args)
+		return Eval(fn.Body, env)
+	case *object.Builtin:
+		return fn.Fn(args...)
+	case *object.ObjectMap:
+		if callFn, ok := fn.Get("__call__"); ok {
+			return applyHandler(callFn, args)
+		}
+	}
+	return UNDEFINED
 }
