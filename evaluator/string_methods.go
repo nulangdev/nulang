@@ -98,6 +98,10 @@ func evalStringProperty(str *object.String, prop string) object.Object {
 			return FALSE
 		}}
 	case "replace":
+		// Use addStringRegexMethods for full regex support
+		if regexMethod := addStringRegexMethods(str, "replace"); regexMethod != nil {
+			return regexMethod
+		}
 		return &object.Builtin{Name: "replace", Fn: func(args ...object.Object) object.Object {
 			if len(args) < 2 {
 				return str
@@ -106,6 +110,24 @@ func evalStringProperty(str *object.String, prop string) object.Object {
 			replacement := objectToString(args[1])
 			return &object.String{Value: replace(str.Value, search, replacement)}
 		}}
+	case "match":
+		// Use addStringRegexMethods for regex match
+		if regexMethod := addStringRegexMethods(str, "match"); regexMethod != nil {
+			return regexMethod
+		}
+		return UNDEFINED
+	case "replaceAll":
+		// Use addStringRegexMethods for replaceAll
+		if regexMethod := addStringRegexMethods(str, "replaceAll"); regexMethod != nil {
+			return regexMethod
+		}
+		return UNDEFINED
+	case "search":
+		// Use addStringRegexMethods for regex search
+		if regexMethod := addStringRegexMethods(str, "search"); regexMethod != nil {
+			return regexMethod
+		}
+		return UNDEFINED
 	case "repeat":
 		return &object.Builtin{Name: "repeat", Fn: func(args ...object.Object) object.Object {
 			if len(args) < 1 {

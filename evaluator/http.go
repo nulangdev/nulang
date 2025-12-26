@@ -546,12 +546,12 @@ func initFetchFunction() *object.Builtin {
 		}
 		req, err := http.NewRequest(method, url, body)
 		if err != nil {
-			return createRejectedPromise(newError(err.Error()))
+			return createRejectedPromise(newError("%s", err.Error()))
 		}
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return createRejectedPromise(newError(err.Error()))
+			return createRejectedPromise(newError("%s", err.Error()))
 		}
 		respObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 		respObj.Set("status", &object.Number{Value: float64(resp.StatusCode)})

@@ -283,6 +283,94 @@ func createDateObject(d *Date) *object.ObjectMap {
 		return &object.Number{Value: float64(d.Time.UnixMilli())}
 	}})
 
+	// format(pattern) - formats date with a pattern (YYYY-MM-DD, etc)
+	obj.Set("format", &object.Builtin{Name: "format", Fn: func(args ...object.Object) object.Object {
+		pattern := "YYYY-MM-DD HH:mm:ss"
+		if len(args) > 0 {
+			if str, ok := args[0].(*object.String); ok {
+				pattern = str.Value
+			}
+		}
+		return &object.String{Value: formatDate(d, pattern)}
+	}})
+
+	// add(duration) - adds duration to date and returns new Date
+	obj.Set("add", &object.Builtin{Name: "add", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return obj
+		}
+
+		var duration time.Duration
+		switch arg := args[0].(type) {
+		case *object.Number:
+			// Treat as milliseconds
+			duration = time.Duration(int64(arg.Value)) * time.Millisecond
+		case *object.String:
+			// Parse duration string
+			parsed, err := parseDuration(arg.Value)
+			if err != nil {
+				return newError("Invalid duration: %s", arg.Value)
+			}
+			duration = parsed
+		default:
+			return obj
+		}
+
+		newDate := &Date{Time: d.Time.Add(duration)}
+		return createDateObject(newDate)
+	}})
+
+	// subtract(duration) - subtracts duration from date and returns new Date
+	obj.Set("subtract", &object.Builtin{Name: "subtract", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return obj
+		}
+
+		var duration time.Duration
+		switch arg := args[0].(type) {
+		case *object.Number:
+			// Treat as milliseconds
+			duration = time.Duration(int64(arg.Value)) * time.Millisecond
+		case *object.String:
+			// Parse duration string
+			parsed, err := parseDuration(arg.Value)
+			if err != nil {
+				return newError("Invalid duration: %s", arg.Value)
+			}
+			duration = parsed
+		default:
+			return obj
+		}
+
+		newDate := &Date{Time: d.Time.Add(-duration)}
+		return createDateObject(newDate)
+	}})
+
+	// diff(otherDate) - returns difference in milliseconds
+	obj.Set("diff", &object.Builtin{Name: "diff", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return &object.Number{Value: 0}
+		}
+
+		var otherTime time.Time
+		switch arg := args[0].(type) {
+		case *object.ObjectMap:
+			if dateObj, ok := arg.Get("_date"); ok {
+				if otherDate, ok := dateObj.(*Date); ok {
+					otherTime = otherDate.Time
+				}
+			}
+		case *object.Number:
+			// Treat as timestamp
+			otherTime = time.UnixMilli(int64(arg.Value))
+		default:
+			return &object.Number{Value: 0}
+		}
+
+		diff := d.Time.Sub(otherTime)
+		return &object.Number{Value: float64(diff.Milliseconds())}
+	}})
+
 	return obj
 }
 

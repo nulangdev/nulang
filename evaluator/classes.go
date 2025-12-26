@@ -96,16 +96,49 @@ func evalClassDeclaration(cd *ast.ClassDeclaration, env *object.Environment) obj
 					Env:        env,
 				}
 
+				// Apply method decorators if present
+				var finalMethod object.Object = method
+				if len(member.Decorators) > 0 {
+					// Create a temporary class object as target for decorator
+					targetClass := &Class{Name: class.Name}
+					decorated := applyMethodDecorators(method, memberName, member.Decorators, targetClass, env)
+					if isError(decorated) {
+						return decorated
+					}
+					finalMethod = decorated
+				}
+
 				if member.IsStatic {
-					class.Static[memberName] = method
+					if fn, ok := finalMethod.(*object.Function); ok {
+						class.Static[memberName] = fn
+					} else {
+						class.Static[memberName] = finalMethod
+					}
 				} else {
-					class.Methods[memberName] = method
+					if fn, ok := finalMethod.(*object.Function); ok {
+						class.Methods[memberName] = fn
+					} else {
+						// If decorator returned something other than a function,
+						// store it as a property instead
+						class.Properties[memberName] = finalMethod
+					}
 				}
 			} else if member.Value != nil {
 				// Property
 				value := Eval(member.Value, env)
 				if isError(value) {
 					return value
+				}
+
+				// Apply property decorators if present
+				if len(member.Decorators) > 0 {
+					// Create a temporary class object as target for decorator
+					targetClass := &Class{Name: class.Name}
+					decorated := applyPropertyDecorators(value, memberName, member.Decorators, targetClass, env)
+					if isError(decorated) {
+						return decorated
+					}
+					value = decorated
 				}
 
 				if member.IsStatic {
@@ -126,7 +159,7 @@ func evalClassDeclaration(cd *ast.ClassDeclaration, env *object.Environment) obj
 }
 
 // createClassInstance creates a new instance of a class
-func createClassInstance(class *Class, args []object.Object, env *object.Environment) object.Object {
+func createClassInstance(class *Class, args []object.Object, _ *object.Environment) object.Object {
 	instance := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 
 	// Create instance environment
@@ -414,7 +447,7 @@ func evalNewExpressionWithClass(ne *ast.NewExpression, env *object.Environment) 
 }
 
 // evalSuperExpression handles 'super' keyword
-func evalSuperExpression(se *ast.SuperExpression, env *object.Environment) object.Object {
+func evalSuperExpression(_ *ast.SuperExpression, env *object.Environment) object.Object {
 	superObj, ok := env.Get("super")
 	if !ok {
 		return newError("'super' keyword is only valid inside a class method")

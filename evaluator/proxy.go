@@ -205,7 +205,7 @@ func ProxyConstruct(proxy *ProxyObject, args []object.Object, env *object.Enviro
 }
 
 // applyProxyTrap applies a proxy trap function
-func applyProxyTrap(trap object.Object, args []object.Object, env *object.Environment) object.Object {
+func applyProxyTrap(trap object.Object, args []object.Object, _ *object.Environment) object.Object {
 	switch fn := trap.(type) {
 	case *object.Function:
 		extendedEnv := extendFunctionEnv(fn, args)
@@ -281,20 +281,6 @@ func createProxy(args []object.Object) object.Object {
 		Handler: handler,
 		Revoked: false,
 	}
-}
-
-// isProxyObject checks if an object is a Proxy
-func isProxyObject(obj object.Object) bool {
-	_, ok := obj.(*ProxyObject)
-	return ok
-}
-
-// getProxyTarget returns the target of a Proxy
-func getProxyTarget(obj object.Object) object.Object {
-	if proxy, ok := obj.(*ProxyObject); ok {
-		return proxy.Target
-	}
-	return obj
 }
 
 // isProxyConstructor checks if an ObjectMap is the Proxy constructor

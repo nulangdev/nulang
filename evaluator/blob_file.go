@@ -235,6 +235,48 @@ func initBlobFileClasses() {
 		return stream
 	}
 
+	// Blob.prototype.toDataURL() - returns a data URL (non-standard but useful)
+	BlobClass.NativeMethods["toDataURL"] = func(this object.Object, args ...object.Object) object.Object {
+		instance, ok := this.(*object.ObjectMap)
+		if !ok {
+			return newError("Blob.toDataURL: invalid this context")
+		}
+
+		// Get content type
+		contentType := "application/octet-stream"
+		if typeVal, exists := instance.Get("_type"); exists {
+			if str, ok := typeVal.(*object.String); ok && str.Value != "" {
+				contentType = str.Value
+			}
+		}
+
+		// Convert to base64
+		base64Data := blobToBase64(instance)
+		dataURL := "data:" + contentType + ";base64," + base64Data
+
+		return &object.String{Value: dataURL}
+	}
+
+	// Blob.prototype.bytes() - returns Promise<Uint8Array> (Node.js 20+)
+	BlobClass.NativeMethods["bytes"] = func(this object.Object, args ...object.Object) object.Object {
+		instance, ok := this.(*object.ObjectMap)
+		if !ok {
+			return blobCreateRejectedPromise(newError("Blob.bytes: invalid this context"))
+		}
+
+		if data, exists := instance.Get("_data"); exists {
+			if buffer, ok := data.(*object.Buffer); ok {
+				// Convert to Array of numbers (Uint8Array-like)
+				elements := make([]object.Object, len(buffer.Data))
+				for i, b := range buffer.Data {
+					elements[i] = &object.Number{Value: float64(b)}
+				}
+				return blobCreateResolvedPromise(&object.Array{Elements: elements})
+			}
+		}
+		return blobCreateResolvedPromise(&object.Array{Elements: []object.Object{}})
+	}
+
 	// Define File class (extends Blob)
 	FileClass = &Class{
 		Name:          "File",

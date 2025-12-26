@@ -271,7 +271,7 @@ func initTimerBuiltins() {
 }
 
 // executeTimerCallback executes a timer callback function
-func executeTimerCallback(fn *object.Function, env *object.Environment, args []object.Object) object.Object {
+func executeTimerCallback(fn *object.Function, _ *object.Environment, args []object.Object) object.Object {
 	extendedEnv := extendFunctionEnv(fn, args)
 	return Eval(fn.Body, extendedEnv)
 }

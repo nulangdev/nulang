@@ -307,7 +307,7 @@ func evalIdentifier(node *ast.Identifier, env *object.Environment) object.Object
 	if builtin, ok := builtins[node.Value]; ok {
 		return builtin
 	}
-	return newError("identifier not found: " + node.Value)
+	return newError("%s", "identifier not found: " + node.Value)
 }
 
 func nativeBoolToBooleanObject(input bool) *object.Boolean {
@@ -400,7 +400,7 @@ func evalAwaitExpression(ae *ast.AwaitExpression, env *object.Environment) objec
 				if err, ok := promise.Reason.(*object.Error); ok {
 					return err
 				}
-				return newError(promise.Reason.Inspect())
+				return newError("%s", promise.Reason.Inspect())
 			}
 			return newError("Promise rejected")
 		default:

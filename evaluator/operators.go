@@ -36,7 +36,7 @@ func evalPreIncrement(node ast.Expression, env *object.Environment) object.Objec
 	}
 	val, ok := env.Get(ident.Value)
 	if !ok {
-		return newError("identifier not found: " + ident.Value)
+		return newError("%s", "identifier not found: " + ident.Value)
 	}
 	num, ok := val.(*object.Number)
 	if !ok {
@@ -54,7 +54,7 @@ func evalPreDecrement(node ast.Expression, env *object.Environment) object.Objec
 	}
 	val, ok := env.Get(ident.Value)
 	if !ok {
-		return newError("identifier not found: " + ident.Value)
+		return newError("%s", "identifier not found: " + ident.Value)
 	}
 	num, ok := val.(*object.Number)
 	if !ok {
@@ -72,7 +72,7 @@ func evalPostfixExpression(node *ast.PostfixExpression, env *object.Environment)
 	}
 	val, ok := env.Get(ident.Value)
 	if !ok {
-		return newError("identifier not found: " + ident.Value)
+		return newError("%s", "identifier not found: " + ident.Value)
 	}
 	num, ok := val.(*object.Number)
 	if !ok {
@@ -146,8 +146,94 @@ func evalInfixExpression(node *ast.InfixExpression, env *object.Environment) obj
 			return FALSE
 		}
 		return TRUE
+	case node.Operator == "instanceof":
+		return evalInstanceof(left, right)
 	}
 	return newError("unknown operator: %s %s %s", left.Type(), node.Operator, right.Type())
+}
+
+// evalInstanceof checks if left is an instance of right
+func evalInstanceof(left, right object.Object) object.Object {
+	// Check if right is a Class
+	if class, ok := right.(*Class); ok {
+		// Check if left is an ObjectMap (instance)
+		if objMap, ok := left.(*object.ObjectMap); ok {
+			// Check if the object has properties/methods from this class
+			// by checking prototype chain or special markers
+			if className, found := objMap.Get("__class__"); found {
+				if classNameStr, ok := className.(*object.String); ok {
+					if classNameStr.Value == class.Name {
+						return TRUE
+					}
+				}
+			}
+			// Walk prototype chain to check for class methods
+			for methodName := range class.Methods {
+				if _, found := objMap.Get(methodName); !found {
+					return FALSE
+				}
+			}
+			if len(class.Methods) > 0 {
+				return TRUE
+			}
+		}
+		return FALSE
+	}
+
+	// Check for Error class (special case using isErrorInstance)
+	if builtin, ok := right.(*object.Builtin); ok && builtin.Name == "Error" {
+		return nativeBoolToBooleanObject(isErrorInstance(left))
+	}
+
+	// Check for ObjectMap with __name__ (built-in classes like Error, Date, etc.)
+	if rightMap, ok := right.(*object.ObjectMap); ok {
+		if nameVal, found := rightMap.Get("__name__"); found {
+			if nameStr, ok := nameVal.(*object.String); ok {
+				switch nameStr.Value {
+				case "Error":
+					return nativeBoolToBooleanObject(isErrorInstance(left))
+				case "Array":
+					_, isArray := left.(*object.Array)
+					return nativeBoolToBooleanObject(isArray)
+				case "Promise":
+					_, isPromise := left.(*object.Promise)
+					return nativeBoolToBooleanObject(isPromise)
+				case "RegExp":
+					_, isRegex := left.(*object.RegExp)
+					return nativeBoolToBooleanObject(isRegex)
+				}
+			}
+		}
+		// Check if it's an Error class by name property
+		if nameVal, found := rightMap.Get("name"); found {
+			if nameStr, ok := nameVal.(*object.String); ok && nameStr.Value == "Error" {
+				return nativeBoolToBooleanObject(isErrorInstance(left))
+			}
+		}
+	}
+
+	// Check Array
+	if _, ok := left.(*object.Array); ok {
+		if ident, ok := right.(*object.Builtin); ok && ident.Name == "Array" {
+			return TRUE
+		}
+	}
+
+	// Check Promise  
+	if _, ok := left.(*object.Promise); ok {
+		if ident, ok := right.(*object.Builtin); ok && ident.Name == "Promise" {
+			return TRUE
+		}
+	}
+
+	// Check RegExp
+	if _, ok := left.(*object.RegExp); ok {
+		if ident, ok := right.(*object.Builtin); ok && ident.Name == "RegExp" {
+			return TRUE
+		}
+	}
+
+	return FALSE
 }
 
 func evalNumberInfix(operator string, left, right object.Object) object.Object {
