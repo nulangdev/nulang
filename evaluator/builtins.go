@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
 	"time"
 
 	"github.com/nulang/nulang/object"
@@ -23,38 +24,340 @@ func initBuiltins() {
 	}
 	builtins = make(map[string]object.Object)
 	
-	// Console
+	// Console - Full Node.js compatible implementation
 	console := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Internal state for console
+	consoleCounters := make(map[string]int)
+	consoleTimers := make(map[string]time.Time)
+	consoleGroupLevel := 0
+	
+	// Helper to get indentation based on group level
+	getIndent := func() string {
+		indent := ""
+		for i := 0; i < consoleGroupLevel; i++ {
+			indent += "  "
+		}
+		return indent
+	}
+	
+	// Helper to print with indentation
+	printWithIndent := func(args ...object.Object) {
+		indent := getIndent()
+		fmt.Print(indent)
+		for i, arg := range args {
+			if i > 0 {
+				fmt.Print(" ")
+			}
+			fmt.Print(arg.Inspect())
+		}
+		fmt.Println()
+	}
+	
+	// console.log([data][, ...args])
 	console.Set("log", &object.Builtin{Name: "log", Fn: func(args ...object.Object) object.Object {
-		for i, arg := range args {
-			if i > 0 {
-				fmt.Print(" ")
-			}
-			fmt.Print(arg.Inspect())
-		}
-		fmt.Println()
+		printWithIndent(args...)
 		return UNDEFINED
 	}})
+	
+	// console.info([data][, ...args]) - alias for log
+	console.Set("info", &object.Builtin{Name: "info", Fn: func(args ...object.Object) object.Object {
+		printWithIndent(args...)
+		return UNDEFINED
+	}})
+	
+	// console.debug([data][, ...args]) - alias for log
+	console.Set("debug", &object.Builtin{Name: "debug", Fn: func(args ...object.Object) object.Object {
+		printWithIndent(args...)
+		return UNDEFINED
+	}})
+	
+	// console.error([data][, ...args])
 	console.Set("error", &object.Builtin{Name: "error", Fn: func(args ...object.Object) object.Object {
+		indent := getIndent()
+		fmt.Fprint(getStderr(), indent)
 		for i, arg := range args {
 			if i > 0 {
-				fmt.Print(" ")
+				fmt.Fprint(getStderr(), " ")
 			}
-			fmt.Print(arg.Inspect())
+			fmt.Fprint(getStderr(), arg.Inspect())
 		}
-		fmt.Println()
+		fmt.Fprintln(getStderr())
 		return UNDEFINED
 	}})
+	
+	// console.warn([data][, ...args])
 	console.Set("warn", &object.Builtin{Name: "warn", Fn: func(args ...object.Object) object.Object {
+		indent := getIndent()
+		fmt.Fprint(getStderr(), indent)
 		for i, arg := range args {
 			if i > 0 {
-				fmt.Print(" ")
+				fmt.Fprint(getStderr(), " ")
 			}
-			fmt.Print(arg.Inspect())
+			fmt.Fprint(getStderr(), arg.Inspect())
 		}
-		fmt.Println()
+		fmt.Fprintln(getStderr())
 		return UNDEFINED
 	}})
+	
+	// console.assert(value[, ...message])
+	console.Set("assert", &object.Builtin{Name: "assert", Fn: func(args ...object.Object) object.Object {
+		if len(args) == 0 {
+			return UNDEFINED
+		}
+		
+		if !isTruthy(args[0]) {
+			indent := getIndent()
+			fmt.Fprint(getStderr(), indent, "Assertion failed:")
+			if len(args) > 1 {
+				for _, arg := range args[1:] {
+					fmt.Fprint(getStderr(), " ", arg.Inspect())
+				}
+			}
+			fmt.Fprintln(getStderr())
+		}
+		return UNDEFINED
+	}})
+	
+	// console.clear()
+	console.Set("clear", &object.Builtin{Name: "clear", Fn: func(args ...object.Object) object.Object {
+		// ANSI escape codes to clear screen and move cursor to top-left
+		fmt.Print("\033[2J\033[H")
+		return UNDEFINED
+	}})
+	
+	// console.count([label])
+	console.Set("count", &object.Builtin{Name: "count", Fn: func(args ...object.Object) object.Object {
+		label := "default"
+		if len(args) > 0 {
+			label = objectToString(args[0])
+		}
+		consoleCounters[label]++
+		indent := getIndent()
+		fmt.Printf("%s%s: %d\n", indent, label, consoleCounters[label])
+		return UNDEFINED
+	}})
+	
+	// console.countReset([label])
+	console.Set("countReset", &object.Builtin{Name: "countReset", Fn: func(args ...object.Object) object.Object {
+		label := "default"
+		if len(args) > 0 {
+			label = objectToString(args[0])
+		}
+		if _, exists := consoleCounters[label]; exists {
+			consoleCounters[label] = 0
+		} else {
+			fmt.Fprintf(getStderr(), "Count for '%s' does not exist\n", label)
+		}
+		return UNDEFINED
+	}})
+	
+	// console.dir(obj[, options])
+	console.Set("dir", &object.Builtin{Name: "dir", Fn: func(args ...object.Object) object.Object {
+		if len(args) == 0 {
+			return UNDEFINED
+		}
+		indent := getIndent()
+		// For now, use Inspect() - could be enhanced with options later
+		fmt.Printf("%s%s\n", indent, args[0].Inspect())
+		return UNDEFINED
+	}})
+	
+	// console.dirxml(...data) - same as dir for non-DOM environments
+	console.Set("dirxml", &object.Builtin{Name: "dirxml", Fn: func(args ...object.Object) object.Object {
+		if len(args) == 0 {
+			return UNDEFINED
+		}
+		indent := getIndent()
+		fmt.Printf("%s%s\n", indent, args[0].Inspect())
+		return UNDEFINED
+	}})
+	
+	// console.group([...label])
+	console.Set("group", &object.Builtin{Name: "group", Fn: func(args ...object.Object) object.Object {
+		if len(args) > 0 {
+			printWithIndent(args...)
+		}
+		consoleGroupLevel++
+		return UNDEFINED
+	}})
+	
+	// console.groupCollapsed([...label]) - same as group in terminal
+	console.Set("groupCollapsed", &object.Builtin{Name: "groupCollapsed", Fn: func(args ...object.Object) object.Object {
+		if len(args) > 0 {
+			printWithIndent(args...)
+		}
+		consoleGroupLevel++
+		return UNDEFINED
+	}})
+	
+	// console.groupEnd()
+	console.Set("groupEnd", &object.Builtin{Name: "groupEnd", Fn: func(args ...object.Object) object.Object {
+		if consoleGroupLevel > 0 {
+			consoleGroupLevel--
+		}
+		return UNDEFINED
+	}})
+	
+	// console.table(tabularData[, properties])
+	console.Set("table", &object.Builtin{Name: "table", Fn: func(args ...object.Object) object.Object {
+		if len(args) == 0 {
+			return UNDEFINED
+		}
+		
+		indent := getIndent()
+		data := args[0]
+		
+		switch d := data.(type) {
+		case *object.Array:
+			if len(d.Elements) == 0 {
+				fmt.Println(indent + "┌─────────┐")
+				fmt.Println(indent + "│ (empty) │")
+				fmt.Println(indent + "└─────────┘")
+				return UNDEFINED
+			}
+			
+			// Calculate column widths
+			indexWidth := len(fmt.Sprintf("%d", len(d.Elements)-1))
+			if indexWidth < 5 {
+				indexWidth = 5
+			}
+			valueWidth := 5
+			for _, elem := range d.Elements {
+				w := len(elem.Inspect())
+				if w > valueWidth {
+					valueWidth = w
+				}
+			}
+			if valueWidth > 50 {
+				valueWidth = 50
+			}
+			
+			// Print table
+			fmt.Printf("%s┌%s┬%s┐\n", indent, repeatChar('─', indexWidth+2), repeatChar('─', valueWidth+2))
+			fmt.Printf("%s│ %-*s │ %-*s │\n", indent, indexWidth, "(idx)", valueWidth, "Values")
+			fmt.Printf("%s├%s┼%s┤\n", indent, repeatChar('─', indexWidth+2), repeatChar('─', valueWidth+2))
+			for i, elem := range d.Elements {
+				val := truncateString(elem.Inspect(), valueWidth)
+				fmt.Printf("%s│ %-*d │ %-*s │\n", indent, indexWidth, i, valueWidth, val)
+			}
+			fmt.Printf("%s└%s┴%s┘\n", indent, repeatChar('─', indexWidth+2), repeatChar('─', valueWidth+2))
+			
+		case *object.ObjectMap:
+			if len(d.Pairs) == 0 {
+				fmt.Println(indent + "┌─────────┐")
+				fmt.Println(indent + "│ (empty) │")
+				fmt.Println(indent + "└─────────┘")
+				return UNDEFINED
+			}
+			
+			// Calculate column widths
+			keyWidth := 3
+			valueWidth := 5
+			for key, pair := range d.Pairs {
+				if len(key) > keyWidth {
+					keyWidth = len(key)
+				}
+				w := len(pair.Value.Inspect())
+				if w > valueWidth {
+					valueWidth = w
+				}
+			}
+			if keyWidth > 30 {
+				keyWidth = 30
+			}
+			if valueWidth > 50 {
+				valueWidth = 50
+			}
+			
+			// Print table
+			fmt.Printf("%s┌%s┬%s┐\n", indent, repeatChar('─', keyWidth+2), repeatChar('─', valueWidth+2))
+			fmt.Printf("%s│ %-*s │ %-*s │\n", indent, keyWidth, "Key", valueWidth, "Value")
+			fmt.Printf("%s├%s┼%s┤\n", indent, repeatChar('─', keyWidth+2), repeatChar('─', valueWidth+2))
+			for key, pair := range d.Pairs {
+				k := truncateString(key, keyWidth)
+				v := truncateString(pair.Value.Inspect(), valueWidth)
+				fmt.Printf("%s│ %-*s │ %-*s │\n", indent, keyWidth, k, valueWidth, v)
+			}
+			fmt.Printf("%s└%s┴%s┘\n", indent, repeatChar('─', keyWidth+2), repeatChar('─', valueWidth+2))
+			
+		default:
+			fmt.Printf("%s%s\n", indent, data.Inspect())
+		}
+		
+		return UNDEFINED
+	}})
+	
+	// console.time([label])
+	console.Set("time", &object.Builtin{Name: "time", Fn: func(args ...object.Object) object.Object {
+		label := "default"
+		if len(args) > 0 {
+			label = objectToString(args[0])
+		}
+		if _, exists := consoleTimers[label]; exists {
+			fmt.Fprintf(getStderr(), "Timer '%s' already exists\n", label)
+		} else {
+			consoleTimers[label] = time.Now()
+		}
+		return UNDEFINED
+	}})
+	
+	// console.timeEnd([label])
+	console.Set("timeEnd", &object.Builtin{Name: "timeEnd", Fn: func(args ...object.Object) object.Object {
+		label := "default"
+		if len(args) > 0 {
+			label = objectToString(args[0])
+		}
+		if startTime, exists := consoleTimers[label]; exists {
+			elapsed := time.Since(startTime)
+			indent := getIndent()
+			fmt.Printf("%s%s: %.3fms\n", indent, label, float64(elapsed.Microseconds())/1000.0)
+			delete(consoleTimers, label)
+		} else {
+			fmt.Fprintf(getStderr(), "Timer '%s' does not exist\n", label)
+		}
+		return UNDEFINED
+	}})
+	
+	// console.timeLog([label][, ...data])
+	console.Set("timeLog", &object.Builtin{Name: "timeLog", Fn: func(args ...object.Object) object.Object {
+		label := "default"
+		if len(args) > 0 {
+			label = objectToString(args[0])
+		}
+		if startTime, exists := consoleTimers[label]; exists {
+			elapsed := time.Since(startTime)
+			indent := getIndent()
+			fmt.Printf("%s%s: %.3fms", indent, label, float64(elapsed.Microseconds())/1000.0)
+			// Print additional data
+			if len(args) > 1 {
+				for _, arg := range args[1:] {
+					fmt.Print(" ", arg.Inspect())
+				}
+			}
+			fmt.Println()
+		} else {
+			fmt.Fprintf(getStderr(), "Timer '%s' does not exist\n", label)
+		}
+		return UNDEFINED
+	}})
+	
+	// console.trace([message][, ...args])
+	console.Set("trace", &object.Builtin{Name: "trace", Fn: func(args ...object.Object) object.Object {
+		indent := getIndent()
+		fmt.Fprint(getStderr(), indent, "Trace")
+		if len(args) > 0 {
+			fmt.Fprint(getStderr(), ":")
+			for _, arg := range args {
+				fmt.Fprint(getStderr(), " ", arg.Inspect())
+			}
+		}
+		fmt.Fprintln(getStderr())
+		// Print a simplified stack trace
+		fmt.Fprintln(getStderr(), indent+"    at <anonymous>")
+		return UNDEFINED
+	}})
+	
 	builtins["console"] = console
 	
 	// Math object
@@ -579,4 +882,29 @@ func nativeToObject(native interface{}) object.Object {
 		return &object.ObjectMap{Pairs: pairs}
 	}
 	return UNDEFINED
+}
+
+// getStderr returns os.Stderr for console output
+func getStderr() *os.File {
+	return os.Stderr
+}
+
+// repeatChar repeats a character n times and returns the resulting string
+func repeatChar(char rune, count int) string {
+	result := make([]rune, count)
+	for i := 0; i < count; i++ {
+		result[i] = char
+	}
+	return string(result)
+}
+
+// truncateString truncates a string to maxLen characters, adding "..." if truncated
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
