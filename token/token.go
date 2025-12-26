@@ -19,10 +19,11 @@ const (
 	EOF     TokenType = "EOF"
 
 	// Identifiers + literals
-	IDENT  TokenType = "IDENT"  // add, foobar, x, y, ...
-	NUMBER TokenType = "NUMBER" // 1234, 3.14
-	STRING TokenType = "STRING" // "hello world"
-	REGEX  TokenType = "REGEX"  // /pattern/flags
+	IDENT           TokenType = "IDENT"           // add, foobar, x, y, ...
+	NUMBER          TokenType = "NUMBER"          // 1234, 3.14
+	STRING          TokenType = "STRING"          // "hello world"
+	TEMPLATE_STRING TokenType = "TEMPLATE_STRING" // `hello ${name}`
+	REGEX           TokenType = "REGEX"           // /pattern/flags
 
 	// Operators
 	ASSIGN   TokenType = "="

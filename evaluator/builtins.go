@@ -369,6 +369,12 @@ func initBuiltins() {
 	// WeakSet constructor
 	builtins["WeakSet"] = initWeakSetConstructor()
 	
+	// Blob constructor
+	builtins["Blob"] = initBlobConstructor()
+	
+	// File constructor
+	builtins["File"] = initFileConstructor()
+	
 	// require function for CommonJS-style imports
 	builtins["require"] = &object.Builtin{Name: "require", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {

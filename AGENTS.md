@@ -20,7 +20,8 @@ Source Code → Lexer → Tokens → Parser → AST → Evaluator → Output
 2. **Lexer**: Converte texto em tokens
 3. **Parser**: Constrói AST (Abstract Syntax Tree) usando Pratt Parser
 4. **Evaluator**: Percorre a AST e executa as instruções
-5. **Object System**: Representa valores em runtime
+5. **Event Loop**: Gerencia tarefas assíncronas (timers, I/O)
+6. **Object System**: Representa valores em runtime
 
 ## Estrutura do Projeto
 
@@ -55,6 +56,8 @@ nulang/
 │   ├── http.go                # Módulo HTTP/HTTPS e fetch
 │   ├── timers.go              # setTimeout, setInterval, sleep
 │   ├── streams.go             # Readable, Writable, Transform streams
+│   ├── events.go              # EventEmitter
+│   ├── process.go             # Global process object
 │   └── classes.go             # Suporte a classes ES6
 └── examples/
     ├── example.nu             # Exemplo completo
@@ -374,13 +377,43 @@ Promises síncronas (não-async):
 
 | Função                  | Descrição              |
 | ----------------------- | ---------------------- |
-| `http.get(url)`         | Requisição GET         |
-| `http.post(url, body)`  | Requisição POST        |
-| `http.put(url, body)`   | Requisição PUT         |
-| `http.delete(url)`      | Requisição DELETE      |
-| `http.patch(url, body)` | Requisição PATCH       |
+| `http.createServer(fn)` | Cria servidor HTTP     |
 | `http.request(options)` | Requisição customizada |
+| `http.get(url, cb?)`    | Requisição GET         |
 | `fetch(url, options?)`  | Fetch API global       |
+
+**Classes:**
+
+#### `http.Server` (extends `EventEmitter`)
+
+- **Métodos**: `listen(port, [host], [cb])`, `close([cb])`
+- **Eventos**:
+  - `'request'`: `(req, res) => void`
+  - `'close'`: `() => void`
+
+#### `http.IncomingMessage` (extends `stream.Readable`)
+
+- **Propriedades**:
+  - `method`: "GET", "POST", etc.
+  - `url`: URL da requisição
+  - `headers`: Objeto com headers
+  - `httpVersion`: "1.1", etc.
+- **Eventos**: `'data'`, `'end'`
+
+#### `http.ServerResponse` (extends `stream.Writable`)
+
+- **Métodos**:
+  - `writeHead(statusCode, [headers])`
+  - `setHeader(name, value)`
+  - `getHeader(name)`
+  - `write(chunk, [encoding], [cb])`
+  - `end([chunk], [encoding], [cb])`
+- **Propriedades**: `statusCode`, `statusMessage`, `headersSent`
+
+#### `http.ClientRequest` (extends `stream.Writable`)
+
+- **Métodos**: `write()`, `end()`
+- **Eventos**: `'response'`, `'error'`
 
 **Response Object:**
 
@@ -576,6 +609,68 @@ weakSet.add(obj);
 weakSet.has(obj); // true
 ```
 
+### 24. Módulo Events (`evaluator/events.go`)
+
+Implementação completa do `EventEmitter`:
+
+```javascript
+const EventEmitter = require("events");
+const myEmitter = new EventEmitter();
+
+myEmitter.on("event", () => console.log("an event occurred!"));
+myEmitter.emit("event");
+```
+
+**Métodos:**
+
+- `on(event, listener)` / `addListener`
+- `once(event, listener)`
+- `emit(event, ...args)`
+- `removeListener(event, listener)` / `off`
+- `removeAllListeners([event])`
+- `prependListener(event, listener)`
+- `listenerCount(event)`
+- `eventNames()`
+- `setMaxListeners(n)` / `getMaxListeners()`
+
+### 25. Process Global (`evaluator/process.go`)
+
+Objeto global disponível em qualquer lugar:
+
+| Propriedade/Método     | Descrição                      |
+| ---------------------- | ------------------------------ |
+| `process.argv`         | Argumentos da linha de comando |
+| `process.env`          | Variáveis de ambiente          |
+| `process.platform`     | "darwin", "linux", "windows"   |
+| `process.cwd()`        | Diretório atual                |
+| `process.chdir(path)`  | Mudar diretório                |
+| `process.exit(code)`   | Sair do programa               |
+| `process.nextTick(fn)` | Executar na próxima iteração   |
+| `process.stdout`       | `{ write(data) }`              |
+| `process.stderr`       | `{ write(data) }`              |
+
+### 26. Módulo URL (`evaluator/http.go`)
+
+```javascript
+const url = require("url");
+const myURL = url.parse(
+  "https://user:pass@sub.example.com:8080/p/a/t/h?query=string#hash"
+);
+```
+
+**Propriedades do objeto retornado:**
+`href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash`.
+
+### 27. Módulo QueryString (`evaluator/http.go`)
+
+```javascript
+const qs = require("querystring");
+qs.parse("foo=bar&abc=xyz"); // { foo: "bar", abc: "xyz" }
+qs.stringify({ foo: "bar" }); // "foo=bar"
+```
+
+````
+
 ## Features da Linguagem
 
 ### Variáveis
@@ -584,7 +679,7 @@ weakSet.has(obj); // true
 let x = 5; // block-scoped, mutável
 const y = 10; // block-scoped, imutável
 var z = 15; // function-scoped
-```
+````
 
 ### Tipos de Dados
 
@@ -764,6 +859,10 @@ Executar exemplos para verificar funcionalidade:
 8. **Fase 8**: Módulos fs, path, crypto
 9. **Fase 9**: Buffer e Promise
 10. **Fase 10**: Import ES6 e módulo os
+11. **Fase 11**: Módulo Events (EventEmitter)
+12. **Fase 12**: HTTP Server e Client robusto
+13. **Fase 13**: Global Process e Event Loop básico
+14. **Fase 14**: Módulos URL e QueryString
 
 ---
 

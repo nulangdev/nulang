@@ -188,6 +188,30 @@ func (sl *StringLiteral) expressionNode()      {}
 func (sl *StringLiteral) TokenLiteral() string { return sl.Token.Literal }
 func (sl *StringLiteral) String() string       { return "\"" + sl.Value + "\"" }
 
+// TemplateLiteral represents a template literal (backtick string with ${} expressions)
+type TemplateLiteral struct {
+	Token       token.Token
+	Parts       []string     // Static string parts
+	Expressions []Expression // Expressions between ${}
+}
+
+func (tl *TemplateLiteral) expressionNode()      {}
+func (tl *TemplateLiteral) TokenLiteral() string { return tl.Token.Literal }
+func (tl *TemplateLiteral) String() string {
+	var out bytes.Buffer
+	out.WriteString("`")
+	for i, part := range tl.Parts {
+		out.WriteString(part)
+		if i < len(tl.Expressions) {
+			out.WriteString("${")
+			out.WriteString(tl.Expressions[i].String())
+			out.WriteString("}")
+		}
+	}
+	out.WriteString("`")
+	return out.String()
+}
+
 // BooleanLiteral represents a boolean literal
 type BooleanLiteral struct {
 	Token token.Token
@@ -709,6 +733,7 @@ type ClassDeclaration struct {
 	Token      token.Token
 	Name       *Identifier
 	SuperClass Expression
+	Implements []*Identifier // interface names that this class implements
 	Body       *ClassBody
 }
 
@@ -724,6 +749,15 @@ func (cd *ClassDeclaration) String() string {
 	if cd.SuperClass != nil {
 		out.WriteString(" extends ")
 		out.WriteString(cd.SuperClass.String())
+	}
+	if len(cd.Implements) > 0 {
+		out.WriteString(" implements ")
+		for i, iface := range cd.Implements {
+			if i > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(iface.String())
+		}
 	}
 	out.WriteString(" ")
 	out.WriteString(cd.Body.String())

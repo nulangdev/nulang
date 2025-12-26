@@ -52,6 +52,8 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return &object.Number{Value: node.Value}
 	case *ast.StringLiteral:
 		return &object.String{Value: node.Value}
+	case *ast.TemplateLiteral:
+		return evalTemplateLiteral(node, env)
 	case *ast.BooleanLiteral:
 		return nativeBoolToBooleanObject(node.Value)
 	case *ast.NullLiteral:
@@ -353,4 +355,22 @@ func objectToString(obj object.Object) string {
 	default:
 		return obj.Inspect()
 	}
+}
+
+// evalTemplateLiteral evaluates a template literal with ${} interpolation
+func evalTemplateLiteral(tl *ast.TemplateLiteral, env *object.Environment) object.Object {
+	var result string
+	
+	for i, part := range tl.Parts {
+		result += part
+		if i < len(tl.Expressions) {
+			val := Eval(tl.Expressions[i], env)
+			if isError(val) {
+				return val
+			}
+			result += objectToString(val)
+		}
+	}
+	
+	return &object.String{Value: result}
 }

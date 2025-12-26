@@ -115,6 +115,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.SPREAD, p.parseSpreadExpression)
 	p.registerPrefix(token.CLASS, p.parseClassExpression)
 	p.registerPrefix(token.SUPER, p.parseSuperExpression)
+	p.registerPrefix(token.TEMPLATE_STRING, p.parseTemplateLiteral)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -682,6 +683,66 @@ func (p *Parser) parseNumberLiteral() ast.Expression {
 
 func (p *Parser) parseStringLiteral() ast.Expression {
 	return &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
+}
+
+// parseTemplateLiteral parses template literals with ${} interpolation
+func (p *Parser) parseTemplateLiteral() ast.Expression {
+	tl := &ast.TemplateLiteral{Token: p.curToken}
+	raw := p.curToken.Literal
+	
+	// Parse the raw template string into parts and expressions
+	var parts []string
+	var expressions []ast.Expression
+	var currentPart []byte
+	
+	i := 0
+	for i < len(raw) {
+		if i < len(raw)-1 && raw[i] == '$' && raw[i+1] == '{' {
+			// Save current part
+			parts = append(parts, string(currentPart))
+			currentPart = nil
+			
+			// Skip ${
+			i += 2
+			
+			// Find matching }
+			depth := 1
+			exprStart := i
+			for i < len(raw) && depth > 0 {
+				if raw[i] == '{' {
+					depth++
+				} else if raw[i] == '}' {
+					depth--
+				}
+				if depth > 0 {
+					i++
+				}
+			}
+			
+			// Extract expression string and parse it
+			exprStr := raw[exprStart:i]
+			if len(exprStr) > 0 {
+				exprLexer := lexer.New(exprStr)
+				exprParser := New(exprLexer)
+				expr := exprParser.parseExpression(LOWEST)
+				if expr != nil {
+					expressions = append(expressions, expr)
+				}
+			}
+			i++ // Skip }
+		} else {
+			currentPart = append(currentPart, raw[i])
+			i++
+		}
+	}
+	
+	// Add final part
+	parts = append(parts, string(currentPart))
+	
+	tl.Parts = parts
+	tl.Expressions = expressions
+	
+	return tl
 }
 
 func (p *Parser) parseBooleanLiteral() ast.Expression {
@@ -1273,7 +1334,37 @@ func (p *Parser) parseClassExpression() ast.Expression {
 	if p.peekTokenIs(token.EXTENDS) {
 		p.nextToken()
 		p.nextToken()
-		cd.SuperClass = p.parseExpression(LOWEST)
+		// Parse superclass (but stop at 'implements' or '{')
+		if p.curTokenIs(token.IDENT) {
+			cd.SuperClass = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+			// Handle member access like stream.Readable
+			for p.peekTokenIs(token.DOT) {
+				p.nextToken()
+				p.nextToken()
+				cd.SuperClass = &ast.MemberExpression{
+					Object:   cd.SuperClass,
+					Property: &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+				}
+			}
+		}
+	}
+	
+	// Optional implements clause
+	if p.peekTokenIs(token.IMPLEMENTS) {
+		p.nextToken()
+		cd.Implements = []*ast.Identifier{}
+		
+		for {
+			if !p.expectPeek(token.IDENT) {
+				return nil
+			}
+			cd.Implements = append(cd.Implements, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+			
+			if !p.peekTokenIs(token.COMMA) {
+				break
+			}
+			p.nextToken()
+		}
 	}
 	
 	// Class body

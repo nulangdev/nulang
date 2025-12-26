@@ -204,12 +204,18 @@ func (l *Lexer) NextToken() token.Token {
 		tok = newToken(token.LBRACKET, l.ch, l.line, l.column)
 	case ']':
 		tok = newToken(token.RBRACKET, l.ch, l.line, l.column)
-	case '"', '\'', '`':
+	case '"', '\'':
 		tok.Type = token.STRING
 		tok.Literal = l.readString(l.ch)
 		tok.Line = l.line
 		tok.Column = l.column
 		l.readChar() // consume closing quote
+		return tok
+	case '`':
+		tok.Type = token.TEMPLATE_STRING
+		tok.Literal = l.readTemplateString()
+		tok.Line = l.line
+		tok.Column = l.column
 		return tok
 	case 0:
 		tok.Literal = ""
@@ -312,6 +318,83 @@ func (l *Lexer) readString(quote byte) string {
 			}
 		} else {
 			result = append(result, l.ch)
+		}
+	}
+	return string(result)
+}
+
+// readTemplateString reads a template literal (backtick string) with ${} expressions
+// It returns the raw content including ${...} placeholders for later parsing
+func (l *Lexer) readTemplateString() string {
+	var result []byte
+	l.readChar() // consume opening backtick
+	for {
+		if l.ch == '`' || l.ch == 0 {
+			l.readChar() // consume closing backtick
+			break
+		}
+		if l.ch == '\\' {
+			l.readChar()
+			switch l.ch {
+			case 'n':
+				result = append(result, '\n')
+			case 't':
+				result = append(result, '\t')
+			case 'r':
+				result = append(result, '\r')
+			case '\\':
+				result = append(result, '\\')
+			case '`':
+				result = append(result, '`')
+			case '$':
+				result = append(result, '$')
+			case '0':
+				result = append(result, 0)
+			default:
+				result = append(result, l.ch)
+			}
+			l.readChar()
+		} else if l.ch == '$' && l.peekChar() == '{' {
+			// Keep the ${...} as is for later parsing
+			result = append(result, '$', '{')
+			l.readChar() // consume $
+			l.readChar() // consume {
+			// Read until matching }
+			depth := 1
+			for depth > 0 && l.ch != 0 {
+				if l.ch == '{' {
+					depth++
+				} else if l.ch == '}' {
+					depth--
+					if depth == 0 {
+						result = append(result, '}')
+						l.readChar()
+						break
+					}
+				}
+				if l.ch == '"' || l.ch == '\'' {
+					// Handle strings inside expressions
+					quote := l.ch
+					result = append(result, l.ch)
+					l.readChar()
+					for l.ch != quote && l.ch != 0 {
+						if l.ch == '\\' {
+							result = append(result, l.ch)
+							l.readChar()
+						}
+						result = append(result, l.ch)
+						l.readChar()
+					}
+					result = append(result, l.ch)
+					l.readChar()
+				} else {
+					result = append(result, l.ch)
+					l.readChar()
+				}
+			}
+		} else {
+			result = append(result, l.ch)
+			l.readChar()
 		}
 	}
 	return string(result)
