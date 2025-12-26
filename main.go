@@ -21,8 +21,58 @@ func main() {
 		return
 	}
 
-	filename := os.Args[1]
-	runFile(filename)
+	switch os.Args[1] {
+	case "install":
+		handleInstall()
+	case "init":
+		handleInit()
+	case "version", "-v", "--version":
+		fmt.Printf("Nulang v%s\n", VERSION)
+	case "help", "-h", "--help":
+		printCLIHelp()
+	default:
+		runFile(os.Args[1])
+	}
+}
+
+func handleInstall() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := evaluator.InstallDependencies(cwd); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+func handleInit() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+
+	if err := evaluator.InitProject(cwd); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+func printCLIHelp() {
+	fmt.Printf("Nulang v%s - JavaScript-like language written in Go\n\n", VERSION)
+	fmt.Println("Usage:")
+	fmt.Println("  nulang <file.nu>     Run a Nulang script")
+	fmt.Println("  nulang               Start the REPL")
+	fmt.Println()
+	fmt.Println("Commands:")
+	fmt.Println("  install              Install dependencies from nulang.yml")
+	fmt.Println("  init                 Create a new nulang.yml file")
+	fmt.Println("  version, -v          Show version")
+	fmt.Println("  help, -h             Show this help")
+	fmt.Println()
 }
 
 func runFile(filename string) {

@@ -148,6 +148,15 @@ func resolveModulePath(modulePath string, basePath string) string {
 		}
 	}
 	
+	// Check .nu_modules directory for package imports
+	nuModulesPath := FindNuModulesPath(basePath)
+	if nuModulesPath != "" {
+		pkgPath := filepath.Join(nuModulesPath, modulePath, "index.nu")
+		if _, err := os.Stat(pkgPath); err == nil {
+			return pkgPath
+		}
+	}
+	
 	// Try current directory
 	if filepath.Ext(modulePath) == "" {
 		if _, err := os.Stat(modulePath + ".nu"); err == nil {
