@@ -102,6 +102,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.TypeAliasDeclaration:
 		// Type aliases are type-only, just return undefined
 		return UNDEFINED
+	case *ast.DeclareStatement:
+		// Declarations are type-only, just return undefined
+		return UNDEFINED
 	}
 	return UNDEFINED
 }

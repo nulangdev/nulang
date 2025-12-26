@@ -888,3 +888,20 @@ func (ta *TypeAliasDeclaration) String() string {
 	}
 	return out.String()
 }
+
+// DeclareStatement represents a declare statement (TypeScript-like)
+type DeclareStatement struct {
+	Token token.Token
+	Value Statement
+}
+
+func (ds *DeclareStatement) statementNode()       {}
+func (ds *DeclareStatement) TokenLiteral() string { return ds.Token.Literal }
+func (ds *DeclareStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("declare ")
+	if ds.Value != nil {
+		out.WriteString(ds.Value.String())
+	}
+	return out.String()
+}

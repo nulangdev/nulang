@@ -129,6 +129,7 @@ const (
 	PUBLIC    TokenType = "PUBLIC"
 	PROTECTED TokenType = "PROTECTED"
 	READONLY  TokenType = "READONLY"
+	DECLARE   TokenType = "DECLARE"
 )
 
 var keywords = map[string]TokenType{
@@ -183,6 +184,7 @@ var keywords = map[string]TokenType{
 	"public":     PUBLIC,
 	"protected":  PROTECTED,
 	"readonly":   READONLY,
+	"declare":    DECLARE,
 }
 
 // LookupIdent checks if the identifier is a keyword

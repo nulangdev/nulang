@@ -237,6 +237,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseInterfaceStatement()
 	case token.TYPE:
 		return p.parseTypeAliasStatement()
+	case token.DECLARE:
+		return p.parseDeclareStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -250,17 +252,17 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 	}
 
 	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
-
-	if !p.expectPeek(token.ASSIGN) {
-		// Allow declarations without initialization
-		if p.peekTokenIs(token.SEMICOLON) {
-			p.nextToken()
-		}
-		return stmt
+	
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation(false)
 	}
 
-	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
+	if p.peekTokenIs(token.ASSIGN) {
+		p.nextToken()
+		p.nextToken()
+		stmt.Value = p.parseExpression(LOWEST)
+	}
 
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
@@ -277,6 +279,11 @@ func (p *Parser) parseConstStatement() *ast.ConstStatement {
 	}
 
 	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation(false)
+	}
 
 	if !p.expectPeek(token.ASSIGN) {
 		p.errors = append(p.errors, "const requires initialization")
@@ -302,15 +309,16 @@ func (p *Parser) parseVarStatement() *ast.VarStatement {
 
 	stmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 
-	if !p.expectPeek(token.ASSIGN) {
-		if p.peekTokenIs(token.SEMICOLON) {
-			p.nextToken()
-		}
-		return stmt
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation(false)
 	}
 
-	p.nextToken()
-	stmt.Value = p.parseExpression(LOWEST)
+	if p.peekTokenIs(token.ASSIGN) {
+		p.nextToken()
+		p.nextToken()
+		stmt.Value = p.parseExpression(LOWEST)
+	}
 
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
@@ -555,11 +563,13 @@ func (p *Parser) parseImportNames() []*ast.Identifier {
 func (p *Parser) parseExportStatement() *ast.ExportStatement {
 	stmt := &ast.ExportStatement{Token: p.curToken}
 
-	p.nextToken()
-
-	if p.curTokenIs(token.DEFAULT) {
+	if p.peekTokenIs(token.DEFAULT) {
+		p.nextToken()
 		p.nextToken()
 		stmt.Default = p.parseExpression(LOWEST)
+	} else {
+		p.nextToken()
+		stmt.Named = []ast.Statement{p.parseStatement()}
 	}
 
 	if p.peekTokenIs(token.SEMICOLON) {
@@ -579,14 +589,22 @@ func (p *Parser) parseFunctionStatement() ast.Statement {
 	funcLit, ok := expr.(*ast.FunctionLiteral)
 	if ok && funcLit.Name != nil {
 		// Named function declaration - treat as var declaration
-		return &ast.VarStatement{
+		stmt := &ast.VarStatement{
 			Token: funcLit.Token,
 			Name:  funcLit.Name,
 			Value: funcLit,
 		}
+		if p.peekTokenIs(token.SEMICOLON) {
+			p.nextToken()
+		}
+		return stmt
 	}
 
-	return &ast.ExpressionStatement{Token: p.curToken, Expression: expr}
+	stmt := &ast.ExpressionStatement{Token: p.curToken, Expression: expr}
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+	return stmt
 }
 
 func (p *Parser) parseExpressionStatement() *ast.ExpressionStatement {
@@ -771,8 +789,22 @@ func (p *Parser) parseGroupedExpression() ast.Expression {
 
 	// Check if this could be arrow function parameters
 	params := p.tryParseArrowParams()
-	if params != nil && p.peekTokenIs(token.ARROW) {
-		return p.parseArrowFunction(params)
+	if params != nil {
+		// Look ahead for =>, skipping potential return type
+		isArrow := false
+		if p.peekTokenIs(token.ARROW) {
+			isArrow = true
+		} else if p.peekTokenIs(token.COLON) {
+			// Skip type and see if => follows
+			// Since we don't want to advance the parser permanently if it's NOT an arrow,
+			// this is a bit tricky. But tryParseArrowParams already advanced it to RPAREN.
+			// If we see : here, it's almost certainly a type annotation for an arrow.
+			isArrow = true 
+		}
+
+		if isArrow {
+			return p.parseArrowFunction(params)
+		}
 	}
 
 	// Regular grouped expression
@@ -798,7 +830,7 @@ func (p *Parser) tryParseArrowParams() []*ast.Identifier {
 		// Handle type annotation in arrow params
 		if p.peekTokenIs(token.COLON) {
 			p.nextToken()
-			p.skipTypeAnnotation()
+			p.skipTypeAnnotation(false)
 		}
 		
 		for p.peekTokenIs(token.COMMA) {
@@ -815,7 +847,7 @@ func (p *Parser) tryParseArrowParams() []*ast.Identifier {
 			// Handle type annotation for subsequent arrow params
 			if p.peekTokenIs(token.COLON) {
 				p.nextToken()
-				p.skipTypeAnnotation()
+				p.skipTypeAnnotation(false)
 			}
 		}
 		
@@ -837,6 +869,12 @@ func (p *Parser) parseArrowFunction(params []*ast.Identifier) ast.Expression {
 		Token:      p.curToken,
 		Parameters: params,
 		IsArrow:    true,
+	}
+	
+	// Handle optional return type annotation
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation(false)
 	}
 
 	if !p.expectPeek(token.ARROW) {
@@ -922,12 +960,22 @@ func (p *Parser) parseFunctionLiteral() ast.Expression {
 	}
 
 	lit.Parameters = p.parseFunctionParameters()
-
-	if !p.expectPeek(token.LBRACE) {
-		return nil
+	
+	// Handle optional return type annotation
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation(true)
 	}
 
-	lit.Body = p.parseBlockStatement()
+	if p.peekTokenIs(token.LBRACE) {
+		p.nextToken()
+		lit.Body = p.parseBlockStatement()
+	} else if p.peekTokenIs(token.SEMICOLON) {
+		// Allowed for declarations (no body)
+	} else {
+		p.expectPeek(token.LBRACE) // Add error if not a semicolon or brace
+		return nil
+	}
 
 	return lit
 }
@@ -977,7 +1025,7 @@ func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 	// Handle optional type annotation: name: type
 	if p.peekTokenIs(token.COLON) {
 		p.nextToken()
-		p.skipTypeAnnotation()
+		p.skipTypeAnnotation(false)
 	}
 	
 	identifiers = append(identifiers, ident)
@@ -990,7 +1038,7 @@ func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 		// Handle optional type annotation for subsequent parameters
 		if p.peekTokenIs(token.COLON) {
 			p.nextToken()
-			p.skipTypeAnnotation()
+			p.skipTypeAnnotation(false)
 		}
 		
 		identifiers = append(identifiers, ident)
@@ -1178,9 +1226,6 @@ func (p *Parser) curPrecedence() int {
 	return LOWEST
 }
 
-// isKeywordAsIdentifier checks if the current token is a keyword that can be used
-// as an identifier in certain contexts (like method names in classes)
-// This matches JavaScript behavior where keywords can be used as property/method names
 func (p *Parser) isKeywordAsIdentifier() bool {
 	switch p.curToken.Type {
 	case token.DELETE, token.IN, token.OF, token.AS, token.FROM,
@@ -1194,7 +1239,8 @@ func (p *Parser) isKeywordAsIdentifier() bool {
 		token.FUNCTION, token.LET, token.CONST, token.VAR,
 		token.IMPORT, token.EXPORT, token.INTERFACE, token.TYPE,
 		token.PRIVATE, token.PUBLIC, token.PROTECTED, token.READONLY,
-		token.IMPLEMENTS, token.NULL, token.UNDEFINED, token.TRUE, token.FALSE:
+		token.IMPLEMENTS, token.NULL, token.UNDEFINED, token.TRUE, token.FALSE,
+		token.DECLARE:
 		return true
 	}
 	// Also check for "constructor" literal
@@ -1301,6 +1347,11 @@ parseBody:
 	}
 	
 	// Check if it's a method (followed by parenthesis) or property
+	if p.peekTokenIs(token.COLON) {
+		p.nextToken()
+		p.skipTypeAnnotation(false)
+	}
+
 	if p.peekTokenIs(token.LPAREN) {
 		// It's a method
 		p.nextToken()
@@ -1308,12 +1359,23 @@ parseBody:
 		// Parse parameters
 		fn := &ast.FunctionLiteral{Token: p.curToken}
 		fn.Parameters = p.parseFunctionParameters()
+
+		// Handle optional return type annotation
+		if p.peekTokenIs(token.COLON) {
+			p.nextToken()
+			p.skipTypeAnnotation(true)
+		}
 		
 		// Parse body
-		if !p.expectPeek(token.LBRACE) {
+		if p.peekTokenIs(token.LBRACE) {
+			p.nextToken()
+			fn.Body = p.parseBlockStatement()
+		} else if p.peekTokenIs(token.SEMICOLON) {
+			// No body
+		} else {
+			p.expectPeek(token.LBRACE)
 			return nil
 		}
-		fn.Body = p.parseBlockStatement()
 		
 		member.Value = fn
 	} else if p.peekTokenIs(token.ASSIGN) {
@@ -1328,7 +1390,7 @@ parseBody:
 	} else if p.peekTokenIs(token.COLON) {
 		// Type annotation - skip it
 		p.nextToken() // skip :
-		p.skipTypeAnnotation()
+		p.skipTypeAnnotation(false)
 		
 		if p.peekTokenIs(token.ASSIGN) {
 			p.nextToken()
@@ -1432,7 +1494,7 @@ func (p *Parser) parseInterfaceMember() *ast.InterfaceMember {
 	// Type annotation
 	if p.peekTokenIs(token.COLON) {
 		p.nextToken()
-		p.skipTypeAnnotation()
+		p.skipTypeAnnotation(false)
 	}
 	
 	// Check for method signature
@@ -1446,7 +1508,7 @@ func (p *Parser) parseInterfaceMember() *ast.InterfaceMember {
 		// Skip return type
 		if p.peekTokenIs(token.COLON) {
 			p.nextToken()
-			p.skipTypeAnnotation()
+			p.skipTypeAnnotation(false)
 		}
 	}
 	
@@ -1456,6 +1518,40 @@ func (p *Parser) parseInterfaceMember() *ast.InterfaceMember {
 	}
 	
 	return member
+}
+
+// parseDeclareStatement parses a declare statement (declare global, declare module, etc.)
+func (p *Parser) parseDeclareStatement() ast.Statement {
+	stmt := &ast.DeclareStatement{Token: p.curToken}
+	p.nextToken() // consume 'declare'
+
+	if p.curTokenIs(token.IDENT) {
+		if p.curToken.Literal == "global" {
+			p.nextToken()
+			if p.curTokenIs(token.LBRACE) {
+				stmt.Value = p.parseBlockStatement()
+				return stmt
+			}
+		} else if p.curToken.Literal == "module" || p.curToken.Literal == "namespace" {
+			p.nextToken()
+			if p.curTokenIs(token.STRING) || p.curTokenIs(token.IDENT) {
+				p.nextToken()
+				if p.curTokenIs(token.LBRACE) {
+					stmt.Value = p.parseBlockStatement()
+					return stmt
+				}
+			}
+		}
+	}
+
+	// Fallback to parsing as regular statement
+	stmt.Value = p.parseStatement()
+	
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+	
+	return stmt
 }
 
 // parseTypeAliasStatement parses a type alias declaration
@@ -1480,7 +1576,7 @@ func (p *Parser) parseTypeAliasStatement() ast.Statement {
 	
 	// Skip the type definition (we don't execute types, just parse them)
 	p.nextToken()
-	p.skipTypeAnnotation()
+	p.skipTypeAnnotation(false)
 	
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
@@ -1489,47 +1585,43 @@ func (p *Parser) parseTypeAliasStatement() ast.Statement {
 	return ta
 }
 
-// skipTypeAnnotation skips over type annotations
-func (p *Parser) skipTypeAnnotation() {
-	// Skip the type annotation by consuming tokens until we hit a terminator
+// skipTypeAnnotation skips over complex type annotations in a robust way
+func (p *Parser) skipTypeAnnotation(stopAtBrace bool) {
 	depth := 0
 	for {
 		switch p.peekToken.Type {
-		case token.LT:
+		case token.LPAREN, token.LT, token.LBRACKET:
 			depth++
 			p.nextToken()
-		case token.GT:
+		case token.LBRACE:
+			if depth == 0 && stopAtBrace {
+				return
+			}
+			depth++
+			p.nextToken()
+		case token.RPAREN, token.GT, token.RBRACKET, token.RBRACE:
 			if depth > 0 {
 				depth--
 				p.nextToken()
 			} else {
+				// We've hit a closing delimiter at depth 0, which means the type annotation is over
 				return
 			}
-		case token.SEMICOLON, token.COMMA, token.RBRACE, token.RPAREN, token.ASSIGN, token.EOF:
+		case token.SEMICOLON, token.COMMA, token.ASSIGN, token.EOF:
 			if depth == 0 {
+				// Statement or list terminator reached at depth 0
 				return
 			}
 			p.nextToken()
-		case token.LBRACE:
-			// Object type
-			p.nextToken()
-			p.skipObjectType()
-		case token.LPAREN:
-			// Function type or grouped type
-			p.nextToken()
-			p.skipGroupedType()
-		case token.LBRACKET:
-			// Array type or tuple
-			p.nextToken()
-			p.skipBracketType()
+		case token.ARROW:
+			if depth > 0 {
+				p.nextToken()
+			} else {
+				// Arrow function operator reached at depth 0 - stop here
+				return
+			}
 		default:
 			p.nextToken()
-		}
-		
-		// Check for union/intersection
-		if depth == 0 && !p.peekTokenIs(token.OR) && !p.peekTokenIs(token.AND) && 
-			!p.peekTokenIs(token.LBRACKET) && !p.peekTokenIs(token.DOT) {
-			return
 		}
 	}
 }
