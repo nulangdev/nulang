@@ -28,7 +28,10 @@ Source Code → Lexer → Tokens → Parser → AST → Evaluator → Output
 ```
 nulang/
 ├── main.go                    # CLI e REPL
+├── watch.go                   # Watch mode para desenvolvimento
 ├── go.mod                     # Go module
+├── AGENTS.md                  # Documentação para agentes de IA
+├── README.md                  # Documentação principal
 ├── token/
 │   └── token.go               # Definição de tipos de tokens
 ├── lexer/
@@ -58,7 +61,46 @@ nulang/
 │   ├── streams.go             # Readable, Writable, Transform streams
 │   ├── events.go              # EventEmitter
 │   ├── process.go             # Global process object
-│   └── classes.go             # Suporte a classes ES6
+│   ├── classes.go             # Suporte a classes ES6
+│   ├── decorators.go          # Decorators de classe e método
+│   ├── error.go               # Classe Error e tratamento de exceções
+│   ├── proxy.go               # Objeto Proxy e handler traps
+│   ├── reflect.go             # API Reflect
+│   ├── blob_file.go           # Blob e File APIs
+│   ├── date.go                # Date object
+│   ├── regexp.go              # RegExp e expressões regulares
+│   ├── mapset.go              # Map, Set, WeakMap, WeakSet
+│   ├── loop.go                # Event loop básico
+│   └── package.go             # Gerenciamento de pacotes
+├── doc/                       # Documentação completa
+│   ├── README.md              # Índice da documentação
+│   ├── array.md               # Documentação de Array
+│   ├── string.md              # Documentação de String
+│   ├── numbers.md             # Documentação de Numbers
+│   ├── map.md                 # Documentação de Map/Set
+│   ├── date.md                # Documentação de Date
+│   ├── regex.md               # Documentação de RegExp
+│   ├── buffer.md              # Documentação de Buffer
+│   ├── blob.md                # Documentação de Blob
+│   ├── file.md                # Documentação de File
+│   ├── classes.md             # Documentação de Classes
+│   ├── getters_setters.md     # Documentação de Getters/Setters
+│   ├── decorators.md          # Documentação de Decorators
+│   ├── promise.md             # Documentação de Promise
+│   ├── events.md              # Documentação de Events
+│   ├── timers.md              # Documentação de Timers
+│   ├── event_loop.md          # Documentação de Event Loop
+│   ├── error.md               # Documentação de Error
+│   ├── stream.md              # Documentação de Streams
+│   ├── filesystem.md          # Documentação de fs e path
+│   ├── http.md                # Documentação de HTTP
+│   ├── process.md             # Documentação de Process
+│   ├── os.md                  # Documentação de OS
+│   ├── crypto.md              # Documentação de Crypto
+│   ├── proxy.md               # Documentação de Proxy
+│   ├── reflect.md             # Documentação de Reflect
+│   ├── modules.md             # Documentação de Modules
+│   └── packages.md            # Documentação de Packages
 └── examples/
     ├── example.nu             # Exemplo completo
     ├── simple.nu              # Exemplo básico
@@ -863,7 +905,15 @@ Executar exemplos para verificar funcionalidade:
 12. **Fase 12**: HTTP Server e Client robusto
 13. **Fase 13**: Global Process e Event Loop básico
 14. **Fase 14**: Módulos URL e QueryString
+15. **Fase 15**: Streams (Readable, Writable, Transform)
+16. **Fase 16**: Blob e File APIs
+17. **Fase 17**: Template Literals (String Interpolation)
+18. **Fase 18**: Classe Error e tratamento de exceções robusto
+19. **Fase 19**: Proxy Object e handler traps
+20. **Fase 20**: Reflect API
+21. **Fase 21**: Decorators (classe, método, propriedade)
+22. **Fase 22**: Watch mode para desenvolvimento
 
 ---
 
-_Documento gerado em 25 de Dezembro de 2024_
+_Documento atualizado em 26 de Dezembro de 2024_

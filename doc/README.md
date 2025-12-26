@@ -24,6 +24,7 @@ Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Nod
 | --------------------------------------- | ------------------------------- |
 | [Classes](./classes.md)                 | Declaração de classes e herança |
 | [Getters/Setters](./getters_setters.md) | Propriedades computadas         |
+| [Decorators](./decorators.md)           | Decorators de classe e método   |
 
 ### Programação Assíncrona
 
@@ -33,6 +34,12 @@ Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Nod
 | [Events](./events.md)         | EventEmitter e padrão de eventos      |
 | [Timers](./timers.md)         | setTimeout, setInterval, setImmediate |
 | [Event Loop](./event_loop.md) | Modelo de execução assíncrona         |
+
+### Tratamento de Erros
+
+| Módulo              | Descrição                             |
+| ------------------- | ------------------------------------- |
+| [Error](./error.md) | Classe Error e tratamento de exceções |
 
 ### Streams
 
@@ -59,6 +66,13 @@ Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Nod
 | [Process](./process.md) | Objeto global process              |
 | [OS](./os.md)           | Informações do sistema operacional |
 | [Crypto](./crypto.md)   | Funções criptográficas             |
+
+### Metaprogramação
+
+| Módulo                  | Descrição                             |
+| ----------------------- | ------------------------------------- |
+| [Proxy](./proxy.md)     | Interceptação de operações em objetos |
+| [Reflect](./reflect.md) | API Reflect para operações de objetos |
 
 ### Módulos e Dependências
 
