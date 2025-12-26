@@ -52,6 +52,10 @@ func applyFunction(fn object.Object, args []object.Object) object.Object {
 		return unwrapReturnValue(evaluated)
 	case *object.Builtin:
 		return fn.Fn(args...)
+	case *object.ObjectMap:
+		if call, ok := fn.Get("__call__"); ok {
+			return applyFunction(call, args)
+		}
 	}
 	return newError("not a function: %s", fn.Type())
 }
@@ -286,15 +290,11 @@ func evalThisExpression(env *object.Environment) object.Object {
 }
 
 func evalNewExpression(ne *ast.NewExpression, env *object.Environment) object.Object {
-	newObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 	constructor := Eval(ne.Class, env)
 	if isError(constructor) {
 		return constructor
 	}
-	fn, ok := constructor.(*object.Function)
-	if !ok {
-		return newError("not a constructor")
-	}
+	// Evaluate arguments
 	var args []object.Object
 	if call, ok := ne.Class.(*ast.CallExpression); ok {
 		args = evalExpressions(call.Arguments, env)
@@ -302,18 +302,31 @@ func evalNewExpression(ne *ast.NewExpression, env *object.Environment) object.Ob
 			return args[0]
 		}
 	}
-	newEnv := object.NewEnclosedEnvironment(fn.Env)
-	newEnv.Set("this", newObj)
-	for i, param := range fn.Parameters {
-		if i < len(args) {
-			newEnv.Set(param.Value, args[i])
-		} else {
-			newEnv.Set(param.Value, UNDEFINED)
+
+	switch fn := constructor.(type) {
+	case *object.Function:
+		newObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		newEnv := object.NewEnclosedEnvironment(fn.Env)
+		newEnv.Set("this", newObj)
+		for i, param := range fn.Parameters {
+			if i < len(args) {
+				newEnv.Set(param.Value, args[i])
+			} else {
+				newEnv.Set(param.Value, UNDEFINED)
+			}
 		}
+		result := Eval(fn.Body, newEnv)
+		if objMap, ok := result.(*object.ObjectMap); ok {
+			return objMap
+		}
+		// If return value is not an object, return the new 'this'
+		return newObj
+
+	case *object.Builtin:
+		// For builtins, we just call them and they should return the new instance
+		return fn.Fn(args...)
+	
+	default:
+		return newError("not a constructor: %s", constructor.Type())
 	}
-	result := Eval(fn.Body, newEnv)
-	if objMap, ok := result.(*object.ObjectMap); ok {
-		return objMap
-	}
-	return newObj
 }

@@ -381,6 +381,9 @@ func initBuiltins() {
 		}
 		return module
 	}}
+
+	// process global object
+	builtins["process"] = initProcessObject()
 }
 
 func stringify(obj object.Object) string {

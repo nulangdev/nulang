@@ -13,9 +13,13 @@ type Class struct {
 	Methods    map[string]*object.Function
 	Getters    map[string]*object.Function
 	Setters    map[string]*object.Function
-	Static     map[string]object.Object
-	Env        *object.Environment
+	Static        map[string]object.Object
+	Env           *object.Environment
+	NativeMethods map[string]NativeMethod
 }
+
+// NativeMethod is a function that can be attached to a class and access 'this'
+type NativeMethod func(this object.Object, args ...object.Object) object.Object
 
 func (c *Class) Type() object.ObjectType { return object.CLASS_OBJ }
 func (c *Class) Inspect() string         { return "[class " + c.Name + "]" }
@@ -27,8 +31,9 @@ func evalClassDeclaration(cd *ast.ClassDeclaration, env *object.Environment) obj
 		Methods:    make(map[string]*object.Function),
 		Getters:    make(map[string]*object.Function),
 		Setters:    make(map[string]*object.Function),
-		Static:     make(map[string]object.Object),
-		Env:        env,
+		Static:        make(map[string]object.Object),
+		NativeMethods: make(map[string]NativeMethod),
+		Env:           env,
 	}
 
 	if cd.Name != nil {
@@ -37,14 +42,15 @@ func evalClassDeclaration(cd *ast.ClassDeclaration, env *object.Environment) obj
 
 	// Handle extends
 	if cd.SuperClass != nil {
-		superObj, ok := env.Get(cd.SuperClass.Value)
-		if !ok {
-			return newError("Superclass '%s' is not defined", cd.SuperClass.Value)
+		superObj := Eval(cd.SuperClass, env)
+		if isError(superObj) {
+			return superObj
 		}
+		
 		if superClass, ok := superObj.(*Class); ok {
 			class.SuperClass = superClass
 		} else {
-			return newError("'%s' is not a class", cd.SuperClass.Value)
+			return newError("Superclass is not a class. Got %s", superObj.Type())
 		}
 	}
 
@@ -148,6 +154,12 @@ func createClassInstance(class *Class, args []object.Object, env *object.Environ
 		instance.Set(name, boundMethod)
 	}
 
+	// Add native methods
+	for name, method := range class.NativeMethods {
+		boundMethod := bindNativeMethod(method, instance)
+		instance.Set(name, boundMethod)
+	}
+
 	// Copy superclass methods
 	if class.SuperClass != nil {
 		copyClassMethods(instance, class.SuperClass, instanceEnv)
@@ -181,6 +193,11 @@ func createClassInstance(class *Class, args []object.Object, env *object.Environ
 
 		// Execute constructor
 		result := Eval(constructor.Body, constructorEnv)
+		if isError(result) {
+			return result
+		}
+	} else if nativeConstructor, ok := class.NativeMethods["constructor"]; ok {
+		result := nativeConstructor(instance, args...)
 		if isError(result) {
 			return result
 		}
@@ -219,6 +236,26 @@ func copyClassMethods(instance *object.ObjectMap, class *Class, env *object.Envi
 			instance.Set(name, boundMethod)
 		}
 	}
+
+	// Copy native methods from superclass
+	for name, method := range class.NativeMethods {
+		if name == "constructor" {
+			continue
+		}
+		if _, ok := instance.Get(name); !ok {
+			boundMethod := bindNativeMethod(method, instance)
+			instance.Set(name, boundMethod)
+		}
+	}
+}
+
+// bindNativeMethod creates a Builtin that calls the NativeMethod with 'this' context
+func bindNativeMethod(method NativeMethod, instance object.Object) *object.Builtin {
+	return &object.Builtin{
+		Fn: func(args ...object.Object) object.Object {
+			return method(instance, args...)
+		},
+	}
 }
 
 // createPrototype creates a prototype object with getters/setters
@@ -252,6 +289,7 @@ func createPrototype(class *Class, env *object.Environment) *object.ObjectMap {
 }
 
 // createSuperObject creates a 'super' object for calling parent methods
+// createSuperObject creates a 'super' object for calling parent methods
 func createSuperObject(superClass *Class, instance *object.ObjectMap, env *object.Environment) *object.ObjectMap {
 	superObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 
@@ -281,6 +319,20 @@ func createSuperObject(superClass *Class, instance *object.ObjectMap, env *objec
 			}(method),
 		}
 		superObj.Set(name, boundMethod)
+		
+		if name == "constructor" {
+			superObj.Set("__call__", boundMethod)
+		}
+	}
+	
+	// Add native methods
+	for name, method := range superClass.NativeMethods {
+		boundMethod := bindNativeMethod(method, instance)
+		superObj.Set(name, boundMethod)
+		
+		if name == "constructor" {
+			superObj.Set("__call__", boundMethod)
+		}
 	}
 
 	return superObj

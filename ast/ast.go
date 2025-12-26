@@ -708,7 +708,7 @@ func (es *ExportStatement) String() string {
 type ClassDeclaration struct {
 	Token      token.Token
 	Name       *Identifier
-	SuperClass *Identifier
+	SuperClass Expression
 	Body       *ClassBody
 }
 

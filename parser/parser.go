@@ -1272,10 +1272,8 @@ func (p *Parser) parseClassExpression() ast.Expression {
 	// Optional extends clause
 	if p.peekTokenIs(token.EXTENDS) {
 		p.nextToken()
-		if !p.expectPeek(token.IDENT) {
-			return nil
-		}
-		cd.SuperClass = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		p.nextToken()
+		cd.SuperClass = p.parseExpression(LOWEST)
 	}
 	
 	// Class body

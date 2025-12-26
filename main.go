@@ -111,56 +111,6 @@ func startREPL() {
 }
 
 func setupGlobalEnv(env *object.Environment) {
-	// Process object
-	processObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-	
-	// process.argv
-	argv := &object.Array{Elements: make([]object.Object, len(os.Args))}
-	for i, arg := range os.Args {
-		argv.Elements[i] = &object.String{Value: arg}
-	}
-	processObj.Set("argv", argv)
-	
-	// process.env
-	envMap := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-	for _, e := range os.Environ() {
-		for j := 0; j < len(e); j++ {
-			if e[j] == '=' {
-				key := e[:j]
-				value := e[j+1:]
-				envMap.Set(key, &object.String{Value: value})
-				break
-			}
-		}
-	}
-	processObj.Set("env", envMap)
-	
-	// process.exit
-	processObj.Set("exit", &object.Builtin{
-		Name: "exit",
-		Fn: func(args ...object.Object) object.Object {
-			code := 0
-			if len(args) > 0 {
-				if num, ok := args[0].(*object.Number); ok {
-					code = int(num.Value)
-				}
-			}
-			os.Exit(code)
-			return nil
-		},
-	})
-	
-	// process.cwd
-	processObj.Set("cwd", &object.Builtin{
-		Name: "cwd",
-		Fn: func(args ...object.Object) object.Object {
-			cwd, _ := os.Getwd()
-			return &object.String{Value: cwd}
-		},
-	})
-	
-	env.Set("process", processObj)
-	
 	// globalThis
 	env.Set("globalThis", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
 }

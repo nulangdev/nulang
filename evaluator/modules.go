@@ -37,6 +37,8 @@ func getBuiltinModule(name string) (*object.ObjectMap, bool) {
 		return initURLModule(), true
 	case "querystring":
 		return initQueryStringModule(), true
+	case "events":
+		return initEventsModule(), true
 	default:
 		return nil, false
 	}
