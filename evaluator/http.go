@@ -7,446 +7,588 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nulang/nulang/object"
 )
 
+var (
+	httpServerClass          *Class
+	httpIncomingMessageClass *Class
+	httpServerResponseClass  *Class
+	httpClientRequestClass   *Class
+	httpAgentClass           *Class
+)
+
 // initHttpModule creates the http module
 func initHttpModule() *object.ObjectMap {
+	if eventEmitterClass == nil {
+		initEventsModule()
+	}
+	initStreamModule()
+	createHttpClasses()
+
 	httpModule := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 
-	// http.get(url, options?)
-	httpModule.Set("get", &object.Builtin{Name: "get", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("http.get requires a URL argument")
-		}
-		url := objectToString(args[0])
-		return httpRequest("GET", url, nil, args)
-	}})
+	httpModule.Set("createServer", &object.Builtin{Name: "createServer", Fn: httpCreateServer})
+	httpModule.Set("request", &object.Builtin{Name: "request", Fn: httpRequestFn})
+	httpModule.Set("get", &object.Builtin{Name: "get", Fn: httpGetFn})
 
-	// http.post(url, body, options?)
-	httpModule.Set("post", &object.Builtin{Name: "post", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("http.post requires a URL argument")
-		}
-		url := objectToString(args[0])
-		var body io.Reader
-		if len(args) > 1 && args[1] != nil {
-			bodyStr := objectToString(args[1])
-			body = strings.NewReader(bodyStr)
-		}
-		return httpRequest("POST", url, body, args)
-	}})
+	httpModule.Set("Server", httpServerClass)
+	httpModule.Set("IncomingMessage", httpIncomingMessageClass)
+	httpModule.Set("ServerResponse", httpServerResponseClass)
+	httpModule.Set("ClientRequest", httpClientRequestClass)
+	httpModule.Set("Agent", httpAgentClass)
 
-	// http.put(url, body, options?)
-	httpModule.Set("put", &object.Builtin{Name: "put", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("http.put requires a URL argument")
-		}
-		url := objectToString(args[0])
-		var body io.Reader
-		if len(args) > 1 && args[1] != nil {
-			bodyStr := objectToString(args[1])
-			body = strings.NewReader(bodyStr)
-		}
-		return httpRequest("PUT", url, body, args)
-	}})
+	methods := &object.Array{Elements: []object.Object{}}
+	for _, m := range []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"} {
+		methods.Elements = append(methods.Elements, &object.String{Value: m})
+	}
+	httpModule.Set("METHODS", methods)
 
-	// http.delete(url, options?)
-	httpModule.Set("delete", &object.Builtin{Name: "delete", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("http.delete requires a URL argument")
+	statusCodes := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	for i := 100; i < 600; i++ {
+		txt := http.StatusText(i)
+		if txt != "" {
+			statusCodes.Set(fmt.Sprintf("%d", i), &object.String{Value: txt})
 		}
-		url := objectToString(args[0])
-		return httpRequest("DELETE", url, nil, args)
-	}})
+	}
+	httpModule.Set("STATUS_CODES", statusCodes)
 
-	// http.patch(url, body, options?)
-	httpModule.Set("patch", &object.Builtin{Name: "patch", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("http.patch requires a URL argument")
-		}
-		url := objectToString(args[0])
-		var body io.Reader
-		if len(args) > 1 && args[1] != nil {
-			bodyStr := objectToString(args[1])
-			body = strings.NewReader(bodyStr)
-		}
-		return httpRequest("PATCH", url, body, args)
-	}})
-
-	// http.request(options) - full control
-	httpModule.Set("request", &object.Builtin{Name: "request", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("http.request requires an options object")
-		}
-
-		opts, ok := args[0].(*object.ObjectMap)
-		if !ok {
-			return newError("http.request requires an options object")
-		}
-
-		method := "GET"
-		if m, ok := opts.Get("method"); ok {
-			method = strings.ToUpper(objectToString(m))
-		}
-
-		urlObj, ok := opts.Get("url")
-		if !ok {
-			return newError("http.request requires a url in options")
-		}
-		url := objectToString(urlObj)
-
-		var body io.Reader
-		if b, ok := opts.Get("body"); ok {
-			bodyStr := objectToString(b)
-			body = strings.NewReader(bodyStr)
-		}
-
-		return httpRequestWithOptions(method, url, body, opts)
-	}})
+	httpModule.Set("globalAgent", createClassInstance(httpAgentClass, []object.Object{}, httpAgentClass.Env))
 
 	return httpModule
 }
 
-// initFetchFunction creates the global fetch function
-func initFetchFunction() *object.Builtin {
-	return &object.Builtin{Name: "fetch", Fn: func(args ...object.Object) object.Object {
+func createHttpClasses() {
+	if httpServerClass != nil {
+		return
+	}
+
+	bind := func(c *Class, name string, fn NativeMethod) {
+		c.NativeMethods[name] = fn
+	}
+
+	// --- Server ---
+	httpServerClass = &Class{
+		Name:          "Server",
+		SuperClass:    eventEmitterClass,
+		Methods:       make(map[string]*object.Function),
+		NativeMethods: make(map[string]NativeMethod),
+		Properties:    make(map[string]object.Object),
+		Static:        make(map[string]object.Object),
+		Env:           object.NewEnvironment(),
+	}
+	bind(httpServerClass, "constructor", func(this object.Object, args ...object.Object) object.Object {
+		if superCtor, ok := eventEmitterClass.NativeMethods["constructor"]; ok {
+			superCtor(this, args...)
+		}
+		if len(args) > 0 {
+			if listener, ok := args[0].(*object.Function); ok {
+				nativeCall(this.(*object.ObjectMap), "on", &object.String{Value: "request"}, listener)
+			}
+		}
+		this.(*object.ObjectMap).Set("_listening", FALSE)
+		return UNDEFINED
+	})
+	bind(httpServerClass, "listen", func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
 		if len(args) < 1 {
-			return newError("fetch requires a URL argument")
+			return newError("Server.listen requires port")
+		}
+		var port int64
+		if pNum, ok := args[0].(*object.Number); ok {
+			port = int64(pNum.Value)
+		} else {
+			return newError("Port must be a number")
+		}
+		host := ""
+		var callback object.Object
+		for i := 1; i < len(args); i++ {
+			if str, ok := args[i].(*object.String); ok {
+				host = str.Value
+			} else if fn, ok := args[i].(*object.Function); ok {
+				callback = fn
+			} else if builtin, ok := args[i].(*object.Builtin); ok {
+				callback = builtin
+			}
+		}
+		addr := fmt.Sprintf("%s:%d", host, port)
+		server := &http.Server{
+			Addr: addr,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reqObj := createIncomingMessage(r)
+				resObj, doneChan := createServerResponse(w)
+				nativeCall(instance, "emit", &object.String{Value: "request"}, reqObj, resObj)
+				<-doneChan
+			}),
 		}
 
+		
+		// Capture server for closing
+		closeFn := &object.Builtin{Fn: func(cArgs ...object.Object) object.Object {
+			// Close the server (this will cause ListenAndServe to return)
+			server.Close()
+			return UNDEFINED
+		}}
+		instance.Set("_closeGoServer", closeFn)
+
+		instance.Set("_listening", TRUE)
+		RegisterAsyncTask()
+		go func() {
+			defer UnregisterAsyncTask()
+			if callback != nil {
+				applyHandler(callback, []object.Object{})
+			}
+			server.ListenAndServe()
+		}()
+		return instance
+	})
+	bind(httpServerClass, "close", func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		instance.Set("_listening", FALSE)
+		
+		// Stop Go Server
+		if closeFn, ok := instance.Get("_closeGoServer"); ok {
+			if c, ok := closeFn.(*object.Builtin); ok {
+				c.Fn()
+			}
+		}
+
+		if len(args) > 0 {
+			applyHandler(args[0], []object.Object{})
+		}
+		nativeCall(instance, "emit", &object.String{Value: "close"})
+		return instance
+	})
+
+	// --- IncomingMessage ---
+	httpIncomingMessageClass = &Class{
+		Name:          "IncomingMessage",
+		SuperClass:    readableClass,
+		Methods:       make(map[string]*object.Function),
+		NativeMethods: make(map[string]NativeMethod),
+		Properties:    make(map[string]object.Object),
+		Static:        make(map[string]object.Object),
+		Env:           object.NewEnvironment(),
+	}
+	bind(httpIncomingMessageClass, "constructor", func(this object.Object, args ...object.Object) object.Object {
+		if superCtor, ok := readableClass.NativeMethods["constructor"]; ok {
+			superCtor(this, args...)
+		}
+		return UNDEFINED
+	})
+	bind(httpIncomingMessageClass, "on", func(this object.Object, args ...object.Object) object.Object {
+		if onFn, ok := eventEmitterClass.NativeMethods["on"]; ok {
+			onFn(this, args...)
+		}
+		if len(args) > 0 {
+			if str, ok := args[0].(*object.String); ok && str.Value == "data" {
+				instance := this.(*object.ObjectMap)
+				if _, ok := instance.Get("_reading"); !ok {
+					instance.Set("_reading", TRUE)
+					nativeCall(instance, "read")
+				}
+			}
+		}
+		return this
+	})
+	bind(httpIncomingMessageClass, "_read", func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		if bodyReaderObj, ok := instance.Get("_bodyReader"); ok {
+			if readFn, ok := bodyReaderObj.(*object.Builtin); ok {
+				readFn.Fn()
+			}
+		} else {
+			nativeCall(instance, "push", NULL)
+		}
+		return UNDEFINED
+	})
+
+	// --- ServerResponse ---
+	httpServerResponseClass = &Class{
+		Name:          "ServerResponse",
+		SuperClass:    writableClass,
+		Methods:       make(map[string]*object.Function),
+		NativeMethods: make(map[string]NativeMethod),
+		Properties:    make(map[string]object.Object),
+		Static:        make(map[string]object.Object),
+		Env:           object.NewEnvironment(),
+	}
+	bind(httpServerResponseClass, "constructor", func(this object.Object, args ...object.Object) object.Object {
+		if superCtor, ok := writableClass.NativeMethods["constructor"]; ok {
+			superCtor(this, args...)
+		}
+		instance := this.(*object.ObjectMap)
+		instance.Set("statusCode", &object.Number{Value: 200})
+		instance.Set("statusMessage", &object.String{Value: "OK"})
+		instance.Set("headersSent", FALSE)
+		instance.Set("_headers", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
+		return UNDEFINED
+	})
+	bind(httpServerResponseClass, "setHeader", func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 2 { return UNDEFINED }
+		instance := this.(*object.ObjectMap)
+		name := strings.ToLower(objectToString(args[0]))
+		value := objectToString(args[1])
+		if h, ok := instance.Get("_headers"); ok {
+			h.(*object.ObjectMap).Set(name, &object.String{Value: value})
+		}
+		return UNDEFINED
+	})
+	bind(httpServerResponseClass, "getHeader", func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 1 { return UNDEFINED }
+		instance := this.(*object.ObjectMap)
+		name := strings.ToLower(objectToString(args[0]))
+		if h, ok := instance.Get("_headers"); ok {
+			if val, ok := h.(*object.ObjectMap).Get(name); ok {
+				return val
+			}
+		}
+		return UNDEFINED
+	})
+	bind(httpServerResponseClass, "writeHead", func(this object.Object, args ...object.Object) object.Object {
+		if len(args) < 1 { return this }
+		instance := this.(*object.ObjectMap)
+		if code, ok := args[0].(*object.Number); ok {
+			instance.Set("statusCode", code)
+		}
+		return this
+	})
+	bind(httpServerResponseClass, "_write", func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		chunk := args[0]
+		if writeFn, ok := instance.Get("_writeToResponse"); ok {
+			if wFn, ok := writeFn.(*object.Builtin); ok {
+				wFn.Fn(chunk)
+			}
+		}
+		if len(args) > 2 {
+			if cb, ok := args[2].(*object.Builtin); ok { cb.Fn() }
+		}
+		return UNDEFINED
+	})
+	bind(httpServerResponseClass, "end", func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		if superEnd, ok := writableClass.NativeMethods["end"]; ok {
+			superEnd(this, args...)
+		}
+		if doneFn, ok := instance.Get("_doneFn"); ok {
+			if fn, ok := doneFn.(*object.Builtin); ok {
+				fn.Fn()
+			}
+		}
+		return instance
+	})
+
+	// --- ClientRequest ---
+	httpClientRequestClass = &Class{
+		Name:          "ClientRequest",
+		SuperClass:    writableClass,
+		Methods:       make(map[string]*object.Function),
+		NativeMethods: make(map[string]NativeMethod),
+		Properties:    make(map[string]object.Object),
+		Static:        make(map[string]object.Object),
+		Env:           object.NewEnvironment(),
+	}
+	bind(httpClientRequestClass, "constructor", func(this object.Object, args ...object.Object) object.Object {
+		if superCtor, ok := writableClass.NativeMethods["constructor"]; ok {
+			superCtor(this, args...)
+		}
+		return UNDEFINED
+	})
+	bind(httpClientRequestClass, "end", func(this object.Object, args ...object.Object) object.Object {
+		instance := this.(*object.ObjectMap)
+		if superEnd, ok := writableClass.NativeMethods["end"]; ok {
+			superEnd(this, args...)
+		}
+		if exec, ok := instance.Get("_execute"); ok {
+			if fn, ok := exec.(*object.Builtin); ok {
+				fn.Fn()
+			}
+		}
+		return instance
+	})
+
+	// --- Agent ---
+	httpAgentClass = &Class{
+		Name: "Agent",
+	}
+}
+
+func httpCreateServer(args ...object.Object) object.Object {
+	return createClassInstance(httpServerClass, args, httpServerClass.Env)
+}
+
+func createIncomingMessage(r *http.Request) *object.ObjectMap {
+	msgObj := createClassInstance(httpIncomingMessageClass, []object.Object{}, httpIncomingMessageClass.Env)
+	msg := msgObj.(*object.ObjectMap)
+	msg.Set("method", &object.String{Value: r.Method})
+	msg.Set("url", &object.String{Value: r.URL.String()})
+	msg.Set("httpVersion", &object.String{Value: fmt.Sprintf("%d.%d", r.ProtoMajor, r.ProtoMinor)})
+	headers := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	rawHeaders := &object.Array{Elements: []object.Object{}}
+	for k, v := range r.Header {
+		joined := strings.Join(v, ", ")
+		headers.Set(strings.ToLower(k), &object.String{Value: joined})
+		rawHeaders.Elements = append(rawHeaders.Elements, &object.String{Value: k}, &object.String{Value: joined})
+	}
+	msg.Set("headers", headers)
+	msg.Set("rawHeaders", rawHeaders)
+	readerFn := &object.Builtin{Fn: func(args ...object.Object) object.Object {
+		go func() {
+			buf := make([]byte, 4096)
+			for {
+				n, err := r.Body.Read(buf)
+				if n > 0 {
+					data := make([]byte, n)
+					copy(data, buf[:n])
+					nativeCall(msg, "push", &object.Buffer{Data: data})
+				}
+				if err != nil {
+					nativeCall(msg, "push", NULL)
+					return
+				}
+			}
+		}()
+		return UNDEFINED
+	}}
+	msg.Set("_bodyReader", readerFn)
+	return msg
+}
+
+func createServerResponse(w http.ResponseWriter) (*object.ObjectMap, chan bool) {
+	done := make(chan bool)
+	resObj := createClassInstance(httpServerResponseClass, []object.Object{}, httpServerResponseClass.Env)
+	res := resObj.(*object.ObjectMap)
+	var headersWritten = false
+	var headersMutex sync.Mutex
+	writeFn := &object.Builtin{Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 { return UNDEFINED }
+		headersMutex.Lock()
+		if !headersWritten {
+			code := 200
+			if c, ok := res.Get("statusCode"); ok {
+				if num, ok := c.(*object.Number); ok {
+					code = int(num.Value)
+				}
+			}
+			if h, ok := res.Get("_headers"); ok {
+				if hMap, ok := h.(*object.ObjectMap); ok {
+					for k, pair := range hMap.Pairs {
+						w.Header().Set(k, objectToString(pair.Value))
+					}
+				}
+			}
+			w.WriteHeader(code)
+			headersWritten = true
+			res.Set("headersSent", TRUE)
+		}
+		headersMutex.Unlock()
+		var data []byte
+		switch v := args[0].(type) {
+		case *object.String:
+			data = []byte(v.Value)
+		case *object.Buffer:
+			data = v.Data
+		}
+		w.Write(data)
+		return UNDEFINED
+	}}
+	res.Set("_writeToResponse", writeFn)
+	doneFn := &object.Builtin{Fn: func(args ...object.Object) object.Object {
+		headersMutex.Lock()
+		if !headersWritten {
+			code := 200
+			if c, ok := res.Get("statusCode"); ok {
+				if num, ok := c.(*object.Number); ok {
+					code = int(num.Value)
+				}
+			}
+			if h, ok := res.Get("_headers"); ok {
+				if hMap, ok := h.(*object.ObjectMap); ok {
+					for k, pair := range hMap.Pairs {
+						w.Header().Set(k, objectToString(pair.Value))
+					}
+				}
+			}
+			w.WriteHeader(code)
+			headersWritten = true
+			res.Set("headersSent", TRUE)
+		}
+		headersMutex.Unlock()
+		// Avoid panic if closed twice
+		select {
+		case <-done:
+		default:
+			close(done)
+		}
+		return UNDEFINED
+	}}
+	res.Set("_doneFn", doneFn)
+	return res, done
+}
+
+func httpRequestFn(args ...object.Object) object.Object {
+	if len(args) < 1 { return newError("request expects options") }
+	var method = "GET"
+	var urlStr = ""
+	var headers = make(map[string]string)
+	var options *object.ObjectMap
+	if optObj, ok := args[0].(*object.ObjectMap); ok {
+		options = optObj
+	} else if optStr, ok := args[0].(*object.String); ok {
+		urlStr = optStr.Value
+		if len(args) > 1 {
+			if o, ok := args[1].(*object.ObjectMap); ok {
+				options = o
+			}
+		}
+	}
+	if options != nil {
+		if m, ok := options.Get("method"); ok { method = objectToString(m) }
+		if u, ok := options.Get("url"); ok { urlStr = objectToString(u) }
+		if h, ok := options.Get("headers"); ok {
+			if hMap, ok := h.(*object.ObjectMap); ok {
+				for k, p := range hMap.Pairs {
+					headers[k] = objectToString(p.Value)
+				}
+			}
+		}
+	}
+	reqObjRes := createClassInstance(httpClientRequestClass, []object.Object{}, httpClientRequestClass.Env)
+	reqObj := reqObjRes.(*object.ObjectMap)
+	var bodyBuf bytes.Buffer
+	_writeFn := &object.Builtin{Fn: func(wArgs ...object.Object) object.Object {
+		chunk := wArgs[0]
+		if str, ok := chunk.(*object.String); ok {
+			bodyBuf.WriteString(str.Value)
+		} else if buf, ok := chunk.(*object.Buffer); ok {
+			bodyBuf.Write(buf.Data)
+		}
+		if len(wArgs) > 2 {
+			if cb, ok := wArgs[2].(*object.Builtin); ok { cb.Fn() }
+		}
+		return UNDEFINED
+	}}
+	reqObj.Set("_write", _writeFn)
+	_executeFn := &object.Builtin{Fn: func(eArgs ...object.Object) object.Object {
+		go func() {
+			client := &http.Client{}
+			r, err := http.NewRequest(method, urlStr, &bodyBuf)
+			if err != nil {
+				nativeCall(reqObj, "emit", &object.String{Value: "error"}, &object.Error{Message: err.Error()})
+				return
+			}
+			for k, v := range headers {
+				r.Header.Set(k, v)
+			}
+			resp, err := client.Do(r)
+			if err != nil {
+				nativeCall(reqObj, "emit", &object.String{Value: "error"}, &object.Error{Message: err.Error()})
+				return
+			}
+			respObj := createIncomingMessage(&http.Request{Method: method, URL: r.URL, ProtoMajor: resp.ProtoMajor, ProtoMinor: resp.ProtoMinor, Header: resp.Header, Body: resp.Body})
+			respObj.Set("statusCode", &object.Number{Value: float64(resp.StatusCode)})
+			respObj.Set("statusMessage", &object.String{Value: resp.Status})
+			nativeCall(reqObj, "emit", &object.String{Value: "response"}, respObj)
+			if (len(args) > 1) { // Call callback if provided initially
+				if cb, ok := args[len(args)-1].(*object.Function); ok {
+					applyHandler(cb, []object.Object{respObj})
+				}
+			}
+		}()
+		return UNDEFINED
+	}}
+	reqObj.Set("_execute", _executeFn)
+	return reqObj
+}
+
+func httpGetFn(args ...object.Object) object.Object {
+	req := httpRequestFn(args...)
+	nativeCall(req.(*object.ObjectMap), "end")
+	return req
+}
+
+func initFetchFunction() *object.Builtin {
+	return &object.Builtin{Name: "fetch", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 { return newError("fetch requires URL") }
 		url := objectToString(args[0])
 		method := "GET"
 		var body io.Reader
-		var headers map[string]string
-
-		// Parse options if provided
 		if len(args) > 1 {
 			if opts, ok := args[1].(*object.ObjectMap); ok {
-				if m, ok := opts.Get("method"); ok {
-					method = strings.ToUpper(objectToString(m))
-				}
+				if m, ok := opts.Get("method"); ok { method = objectToString(m) }
 				if b, ok := opts.Get("body"); ok {
-					bodyStr := objectToString(b)
-					body = strings.NewReader(bodyStr)
-				}
-				if h, ok := opts.Get("headers"); ok {
-					if headersMap, ok := h.(*object.ObjectMap); ok {
-						headers = make(map[string]string)
-						for key, pair := range headersMap.Pairs {
-							headers[key] = objectToString(pair.Value)
-						}
-					}
+					body = strings.NewReader(objectToString(b))
 				}
 			}
 		}
-
-		// Create HTTP request
 		req, err := http.NewRequest(method, url, body)
 		if err != nil {
-			return createRejectedPromise(newError("Failed to create request: %s", err.Error()))
+			return createRejectedPromise(newError(err.Error()))
 		}
-
-		// Set headers
-		if headers != nil {
-			for key, value := range headers {
-				req.Header.Set(key, value)
-			}
-		}
-
-		// Default content type for POST/PUT/PATCH
-		if (method == "POST" || method == "PUT" || method == "PATCH") && req.Header.Get("Content-Type") == "" {
-			req.Header.Set("Content-Type", "application/json")
-		}
-
-		// Execute request
 		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
-			return createRejectedPromise(newError("Request failed: %s", err.Error()))
+			return createRejectedPromise(newError(err.Error()))
 		}
-		defer resp.Body.Close()
-
-		// Read response body
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return createRejectedPromise(newError("Failed to read response: %s", err.Error()))
-		}
-
-		// Create Response object
-		response := createResponseObject(resp, respBody)
-		return createResolvedPromise(response)
+		respObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		respObj.Set("status", &object.Number{Value: float64(resp.StatusCode)})
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		respObj.Set("text", &object.Builtin{Fn: func(a ...object.Object) object.Object {
+			return createResolvedPromise(&object.String{Value: string(b)})
+		}})
+		respObj.Set("json", &object.Builtin{Fn: func(a ...object.Object) object.Object {
+			var d interface{}
+			json.Unmarshal(b, &d)
+			return createResolvedPromise(goValueToObject(d))
+		}})
+		return createResolvedPromise(respObj)
 	}}
 }
 
-func httpRequest(method string, url string, body io.Reader, args []object.Object) object.Object {
-	var headers map[string]string
-
-	// Check for options argument
-	optIndex := 1
-	if method == "POST" || method == "PUT" || method == "PATCH" {
-		optIndex = 2
-	}
-	if len(args) > optIndex {
-		if opts, ok := args[optIndex].(*object.ObjectMap); ok {
-			if h, ok := opts.Get("headers"); ok {
-				if headersMap, ok := h.(*object.ObjectMap); ok {
-					headers = make(map[string]string)
-					for key, pair := range headersMap.Pairs {
-						headers[key] = objectToString(pair.Value)
-					}
-				}
-			}
-		}
-	}
-
-	// Create request
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return newError("Failed to create request: %s", err.Error())
-	}
-
-	// Set headers
-	if headers != nil {
-		for key, value := range headers {
-			req.Header.Set(key, value)
-		}
-	}
-
-	// Default content type
-	if (method == "POST" || method == "PUT" || method == "PATCH") && req.Header.Get("Content-Type") == "" {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	// Execute
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return newError("Request failed: %s", err.Error())
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return newError("Failed to read response: %s", err.Error())
-	}
-
-	return createResponseObject(resp, respBody)
-}
-
-func httpRequestWithOptions(method string, url string, body io.Reader, opts *object.ObjectMap) object.Object {
-	var headers map[string]string
-	timeout := 30 * time.Second
-
-	if h, ok := opts.Get("headers"); ok {
-		if headersMap, ok := h.(*object.ObjectMap); ok {
-			headers = make(map[string]string)
-			for key, pair := range headersMap.Pairs {
-				headers[key] = objectToString(pair.Value)
-			}
-		}
-	}
-
-	if t, ok := opts.Get("timeout"); ok {
-		if num, ok := t.(*object.Number); ok {
-			timeout = time.Duration(num.Value) * time.Millisecond
-		}
-	}
-
-	// Create request
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		return newError("Failed to create request: %s", err.Error())
-	}
-
-	// Set headers
-	if headers != nil {
-		for key, value := range headers {
-			req.Header.Set(key, value)
-		}
-	}
-
-	// Execute
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return newError("Request failed: %s", err.Error())
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return newError("Failed to read response: %s", err.Error())
-	}
-
-	return createResponseObject(resp, respBody)
-}
-
-func createResponseObject(resp *http.Response, body []byte) *object.ObjectMap {
-	response := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-
-	// Status
-	response.Set("status", &object.Number{Value: float64(resp.StatusCode)})
-	response.Set("statusText", &object.String{Value: resp.Status})
-	response.Set("ok", nativeBoolToBooleanObject(resp.StatusCode >= 200 && resp.StatusCode < 300))
-
-	// Headers
-	headers := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-	for key, values := range resp.Header {
-		headers.Set(strings.ToLower(key), &object.String{Value: strings.Join(values, ", ")})
-	}
-	response.Set("headers", headers)
-
-	// Body as string
-	bodyStr := string(body)
-	response.Set("body", &object.String{Value: bodyStr})
-
-	// text() method
-	response.Set("text", &object.Builtin{Name: "text", Fn: func(args ...object.Object) object.Object {
-		return &object.String{Value: bodyStr}
-	}})
-
-	// json() method
-	response.Set("json", &object.Builtin{Name: "json", Fn: func(args ...object.Object) object.Object {
-		var result interface{}
-		if err := json.Unmarshal(body, &result); err != nil {
-			return newError("Failed to parse JSON: %s", err.Error())
-		}
-		return goValueToObject(result)
-	}})
-
-	// arrayBuffer() method - returns Buffer
-	response.Set("arrayBuffer", &object.Builtin{Name: "arrayBuffer", Fn: func(args ...object.Object) object.Object {
-		return &object.Buffer{Data: body}
-	}})
-
-	return response
-}
-
-func createResolvedPromise(value object.Object) *object.Promise {
-	return &object.Promise{
-		State: "fulfilled",
-		Value: value,
-	}
-}
-
-func createRejectedPromise(err object.Object) *object.Promise {
-	return &object.Promise{
-		State:  "rejected",
-		Reason: err,
-	}
-}
-
-// goValueToObject converts Go values to Nulang objects
 func goValueToObject(v interface{}) object.Object {
 	switch val := v.(type) {
-	case nil:
-		return NULL
-	case bool:
-		return nativeBoolToBooleanObject(val)
-	case float64:
-		return &object.Number{Value: val}
-	case string:
-		return &object.String{Value: val}
-	case []interface{}:
-		elements := make([]object.Object, len(val))
-		for i, elem := range val {
-			elements[i] = goValueToObject(elem)
-		}
-		return &object.Array{Elements: elements}
+	case nil: return NULL
+	case string: return &object.String{Value: val}
+	case float64: return &object.Number{Value: val}
+	case bool: if val { return TRUE } else { return FALSE }
 	case map[string]interface{}:
-		obj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-		for key, value := range val {
-			obj.Set(key, goValueToObject(value))
-		}
-		return obj
-	default:
-		return &object.String{Value: fmt.Sprintf("%v", val)}
+		o := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		for k, v := range val { o.Set(k, goValueToObject(v)) }
+		return o
 	}
+	return NULL
 }
 
-// URL module
+func createResolvedPromise(val object.Object) *object.Promise {
+	return &object.Promise{State: "fulfilled", Value: val}
+}
+func createRejectedPromise(val object.Object) *object.Promise {
+	return &object.Promise{State: "rejected", Reason: val}
+}
+
 func initURLModule() *object.ObjectMap {
-	urlModule := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-
-	// URL constructor-like function
-	urlModule.Set("parse", &object.Builtin{Name: "parse", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return newError("URL.parse requires a URL string")
-		}
-
+	m := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	m.Set("parse", &object.Builtin{Name: "parse", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 { return newError("URL.parse requires url") }
 		urlStr := objectToString(args[0])
 		return parseURL(urlStr)
 	}})
-
-	// URLSearchParams
-	urlModule.Set("searchParams", &object.Builtin{Name: "searchParams", Fn: func(args ...object.Object) object.Object {
-		params := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-
-		if len(args) > 0 {
-			if str, ok := args[0].(*object.String); ok {
-				// Parse query string
-				queryStr := str.Value
-				if strings.HasPrefix(queryStr, "?") {
-					queryStr = queryStr[1:]
-				}
-				for _, pair := range strings.Split(queryStr, "&") {
-					parts := strings.SplitN(pair, "=", 2)
-					if len(parts) == 2 {
-						params.Set(parts[0], &object.String{Value: parts[1]})
-					} else if len(parts) == 1 {
-						params.Set(parts[0], &object.String{Value: ""})
-					}
-				}
-			}
-		}
-
-		// get method
-		params.Set("get", &object.Builtin{Name: "get", Fn: func(args ...object.Object) object.Object {
-			if len(args) < 1 {
-				return NULL
-			}
-			key := objectToString(args[0])
-			if val, ok := params.Get(key); ok {
-				return val
-			}
-			return NULL
-		}})
-
-		// toString method
-		params.Set("toString", &object.Builtin{Name: "toString", Fn: func(args ...object.Object) object.Object {
-			var parts []string
-			for key, pair := range params.Pairs {
-				if key == "get" || key == "toString" || key == "set" || key == "has" {
-					continue
-				}
-				parts = append(parts, fmt.Sprintf("%s=%s", key, objectToString(pair.Value)))
-			}
-			return &object.String{Value: strings.Join(parts, "&")}
-		}})
-
-		return params
-	}})
-
-	return urlModule
+	return m
 }
 
 func parseURL(urlStr string) object.Object {
 	urlObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-
-	// Simple URL parsing
 	urlObj.Set("href", &object.String{Value: urlStr})
-
-	// Protocol
 	protocolEnd := strings.Index(urlStr, "://")
 	if protocolEnd > 0 {
 		urlObj.Set("protocol", &object.String{Value: urlStr[:protocolEnd+1]})
 		urlStr = urlStr[protocolEnd+3:]
 	}
-
-	// Query and hash
 	hashIdx := strings.Index(urlStr, "#")
 	hash := ""
 	if hashIdx >= 0 {
@@ -454,7 +596,6 @@ func parseURL(urlStr string) object.Object {
 		urlStr = urlStr[:hashIdx]
 	}
 	urlObj.Set("hash", &object.String{Value: hash})
-
 	queryIdx := strings.Index(urlStr, "?")
 	search := ""
 	if queryIdx >= 0 {
@@ -462,8 +603,6 @@ func parseURL(urlStr string) object.Object {
 		urlStr = urlStr[:queryIdx]
 	}
 	urlObj.Set("search", &object.String{Value: search})
-
-	// Host and pathname
 	pathIdx := strings.Index(urlStr, "/")
 	host := urlStr
 	pathname := "/"
@@ -474,8 +613,6 @@ func parseURL(urlStr string) object.Object {
 	urlObj.Set("host", &object.String{Value: host})
 	urlObj.Set("hostname", &object.String{Value: host})
 	urlObj.Set("pathname", &object.String{Value: pathname})
-
-	// Port
 	portIdx := strings.Index(host, ":")
 	port := ""
 	if portIdx >= 0 {
@@ -483,111 +620,33 @@ func parseURL(urlStr string) object.Object {
 		urlObj.Set("hostname", &object.String{Value: host[:portIdx]})
 	}
 	urlObj.Set("port", &object.String{Value: port})
-
 	return urlObj
 }
 
-// QueryString module
 func initQueryStringModule() *object.ObjectMap {
 	qs := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-
-	// stringify
 	qs.Set("stringify", &object.Builtin{Name: "stringify", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return &object.String{Value: ""}
-		}
-
+		if len(args) < 1 { return &object.String{Value: ""} }
 		obj, ok := args[0].(*object.ObjectMap)
-		if !ok {
-			return &object.String{Value: ""}
-		}
-
+		if !ok { return &object.String{Value: ""} }
 		var parts []string
 		for key, pair := range obj.Pairs {
 			parts = append(parts, fmt.Sprintf("%s=%s", key, objectToString(pair.Value)))
 		}
 		return &object.String{Value: strings.Join(parts, "&")}
 	}})
-
-	// parse
 	qs.Set("parse", &object.Builtin{Name: "parse", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-		}
-
+		if len(args) < 1 { return &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)} }
 		str := objectToString(args[0])
-		if strings.HasPrefix(str, "?") {
-			str = str[1:]
-		}
-
+		if strings.HasPrefix(str, "?") { str = str[1:] }
 		result := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 		for _, pair := range strings.Split(str, "&") {
 			parts := strings.SplitN(pair, "=", 2)
 			if len(parts) == 2 {
 				result.Set(parts[0], &object.String{Value: parts[1]})
-			} else if len(parts) == 1 && parts[0] != "" {
-				result.Set(parts[0], &object.String{Value: ""})
 			}
 		}
 		return result
 	}})
-
 	return qs
-}
-
-// FormData like object for multipart requests
-func createFormData() *object.ObjectMap {
-	formData := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-	data := make(map[string]object.Object)
-
-	formData.Set("append", &object.Builtin{Name: "append", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 2 {
-			return UNDEFINED
-		}
-		key := objectToString(args[0])
-		data[key] = args[1]
-		return UNDEFINED
-	}})
-
-	formData.Set("get", &object.Builtin{Name: "get", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return NULL
-		}
-		key := objectToString(args[0])
-		if val, ok := data[key]; ok {
-			return val
-		}
-		return NULL
-	}})
-
-	formData.Set("has", &object.Builtin{Name: "has", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return FALSE
-		}
-		key := objectToString(args[0])
-		_, ok := data[key]
-		return nativeBoolToBooleanObject(ok)
-	}})
-
-	formData.Set("delete", &object.Builtin{Name: "delete", Fn: func(args ...object.Object) object.Object {
-		if len(args) < 1 {
-			return UNDEFINED
-		}
-		key := objectToString(args[0])
-		delete(data, key)
-		return UNDEFINED
-	}})
-
-	formData.Set("toString", &object.Builtin{Name: "toString", Fn: func(args ...object.Object) object.Object {
-		var buf bytes.Buffer
-		for key, val := range data {
-			if buf.Len() > 0 {
-				buf.WriteString("&")
-			}
-			buf.WriteString(fmt.Sprintf("%s=%s", key, objectToString(val)))
-		}
-		return &object.String{Value: buf.String()}
-	}})
-
-	return formData
 }

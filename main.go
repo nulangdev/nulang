@@ -61,6 +61,9 @@ func runFile(filename string) {
 		fmt.Fprintf(os.Stderr, "%s\n", result.Inspect())
 		os.Exit(1)
 	}
+
+	// Wait for any async tasks (servers, timers)
+	evaluator.AwaitAsyncTasks()
 }
 
 func startREPL() {

@@ -76,7 +76,9 @@ func initTimerBuiltins() {
 		callbackArgs := args[2:]
 
 		// Start timer in goroutine
+		RegisterAsyncTask()
 		go func() {
+			defer UnregisterAsyncTask()
 			select {
 			case <-time.After(timer.Delay):
 				timersMutex.RLock()
@@ -164,7 +166,9 @@ func initTimerBuiltins() {
 		callbackArgs := args[2:]
 
 		// Start interval in goroutine
+		RegisterAsyncTask()
 		go func() {
+			defer UnregisterAsyncTask()
 			ticker := time.NewTicker(timer.Delay)
 			defer ticker.Stop()
 
@@ -228,7 +232,9 @@ func initTimerBuiltins() {
 		callbackArgs := args[1:]
 
 		// Run immediately in goroutine
+		RegisterAsyncTask()
 		go func() {
+			defer UnregisterAsyncTask()
 			executeTimerCallback(fn, fn.Env, callbackArgs)
 		}()
 
