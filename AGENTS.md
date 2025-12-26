@@ -70,6 +70,15 @@ nulang/
 │   ├── date.go                # Date object
 │   ├── regexp.go              # RegExp e expressões regulares
 │   ├── mapset.go              # Map, Set, WeakMap, WeakSet
+│   ├── util.go                # Módulo util (promisify, inspect, format, types)
+│   ├── child_process.go       # Módulo child_process (exec, spawn)
+│   ├── assert.go              # Módulo assert para testes
+│   ├── readline.go            # Módulo readline para CLI interativo
+│   ├── zlib.go                # Módulo zlib (compressão/descompressão)
+│   ├── net.go                 # Módulo net (sockets TCP)
+│   ├── dns.go                 # Módulo dns (resolução DNS)
+│   ├── dgram.go               # Módulo dgram (sockets UDP)
+│   ├── vm.go                  # Módulo vm (execução dinâmica de código)
 │   ├── loop.go                # Event loop básico
 │   └── package.go             # Gerenciamento de pacotes
 ├── doc/                       # Documentação completa

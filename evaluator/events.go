@@ -414,3 +414,55 @@ func applyHandler(handler object.Object, args []object.Object) object.Object {
 	}
 	return UNDEFINED
 }
+
+// createEventEmitter creates a new EventEmitter instance
+func createEventEmitter() *object.ObjectMap {
+	if eventEmitterClass == nil {
+		createEventEmitterClass()
+	}
+	
+	instance := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Call constructor
+	if constructor, ok := eventEmitterClass.NativeMethods["constructor"]; ok {
+		constructor(instance)
+	}
+	
+	// Add all methods
+	for name, method := range eventEmitterClass.NativeMethods {
+		methodName := name
+		nativeMethod := method
+		instance.Set(methodName, &object.Builtin{
+			Name: methodName,
+			Fn: func(args ...object.Object) object.Object {
+				return nativeMethod(instance, args...)
+			},
+		})
+	}
+	
+	return instance
+}
+
+// emitEvent emits an event on an EventEmitter instance
+func emitEvent(instance *object.ObjectMap, eventName string, args ...object.Object) object.Object {
+	if emit, ok := instance.Get("emit"); ok {
+		if emitBuiltin, ok := emit.(*object.Builtin); ok {
+			allArgs := make([]object.Object, len(args)+1)
+			allArgs[0] = &object.String{Value: eventName}
+			copy(allArgs[1:], args)
+			return emitBuiltin.Fn(allArgs...)
+		}
+	}
+	return FALSE
+}
+
+// addEventListener adds an event listener to an EventEmitter instance
+func addEventListener(instance *object.ObjectMap, eventName string, listener object.Object) object.Object {
+	if on, ok := instance.Get("on"); ok {
+		if onBuiltin, ok := on.(*object.Builtin); ok {
+			return onBuiltin.Fn(&object.String{Value: eventName}, listener)
+		}
+	}
+	return instance
+}
+

@@ -46,6 +46,24 @@ func getBuiltinModule(name string) (*object.ObjectMap, bool) {
 		return initQueryStringModule(), true
 	case "events":
 		return initEventsModule(), true
+	case "util":
+		return initUtilModule(), true
+	case "child_process":
+		return initChildProcessModule(), true
+	case "assert":
+		return initAssertModule(), true
+	case "readline":
+		return initReadlineModule(), true
+	case "zlib":
+		return initZlibModule(), true
+	case "net":
+		return initNetModule(), true
+	case "dns":
+		return initDNSModule(), true
+	case "dgram":
+		return initDgramModule(), true
+	case "vm":
+		return initVMModule(), true
 	default:
 		return nil, false
 	}
