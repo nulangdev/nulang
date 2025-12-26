@@ -552,13 +552,28 @@ func initFetchFunction() *object.Builtin {
 
 func goValueToObject(v interface{}) object.Object {
 	switch val := v.(type) {
-	case nil: return NULL
-	case string: return &object.String{Value: val}
-	case float64: return &object.Number{Value: val}
-	case bool: if val { return TRUE } else { return FALSE }
+	case nil:
+		return NULL
+	case string:
+		return &object.String{Value: val}
+	case float64:
+		return &object.Number{Value: val}
+	case bool:
+		if val {
+			return TRUE
+		}
+		return FALSE
+	case []interface{}:
+		arr := &object.Array{Elements: make([]object.Object, len(val))}
+		for i, elem := range val {
+			arr.Elements[i] = goValueToObject(elem)
+		}
+		return arr
 	case map[string]interface{}:
 		o := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-		for k, v := range val { o.Set(k, goValueToObject(v)) }
+		for k, v := range val {
+			o.Set(k, goValueToObject(v))
+		}
 		return o
 	}
 	return NULL

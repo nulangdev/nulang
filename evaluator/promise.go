@@ -14,6 +14,20 @@ const (
 func initPromiseConstructor() *object.ObjectMap {
 	promiseObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 
+	// Promise constructor - __call__ for new Promise(executor)
+	promiseObj.Set("__call__", &object.Builtin{Name: "Promise", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("Promise constructor requires an executor function")
+		}
+
+		executor, ok := args[0].(*object.Function)
+		if !ok {
+			return newError("Promise constructor requires a function as argument")
+		}
+
+		return CreatePromise(executor, executor.Env)
+	}})
+
 	// Promise.resolve(value)
 	promiseObj.Set("resolve", &object.Builtin{Name: "resolve", Fn: func(args ...object.Object) object.Object {
 		var value object.Object = UNDEFINED
@@ -178,7 +192,7 @@ func CreatePromise(executor *object.Function, env *object.Environment) *object.P
 	if errObj, ok := result.(*object.Error); ok {
 		if promise.State == PromisePending {
 			promise.State = PromiseRejected
-			promise.Reason = &object.String{Value: errObj.Message}
+			promise.Reason = createErrorObject(errObj.Message)
 		}
 	}
 
@@ -196,7 +210,12 @@ func PromiseThen(promise *object.Promise, onFulfilled, onRejected *object.Functi
 			result := unwrapReturnValue(Eval(onFulfilled.Body, fnEnv))
 			if errObj, ok := result.(*object.Error); ok {
 				newPromise.State = PromiseRejected
-				newPromise.Reason = &object.String{Value: errObj.Message}
+				newPromise.Reason = createErrorObject(errObj.Message)
+			} else if resultPromise, ok := result.(*object.Promise); ok {
+				// If the result is a Promise, unwrap it (Promise chaining)
+				newPromise.State = resultPromise.State
+				newPromise.Value = resultPromise.Value
+				newPromise.Reason = resultPromise.Reason
 			} else {
 				newPromise.State = PromiseFulfilled
 				newPromise.Value = result
@@ -211,7 +230,12 @@ func PromiseThen(promise *object.Promise, onFulfilled, onRejected *object.Functi
 			result := unwrapReturnValue(Eval(onRejected.Body, fnEnv))
 			if errObj, ok := result.(*object.Error); ok {
 				newPromise.State = PromiseRejected
-				newPromise.Reason = &object.String{Value: errObj.Message}
+				newPromise.Reason = createErrorObject(errObj.Message)
+			} else if resultPromise, ok := result.(*object.Promise); ok {
+				// If the result is a Promise, unwrap it (Promise chaining)
+				newPromise.State = resultPromise.State
+				newPromise.Value = resultPromise.Value
+				newPromise.Reason = resultPromise.Reason
 			} else {
 				newPromise.State = PromiseFulfilled
 				newPromise.Value = result

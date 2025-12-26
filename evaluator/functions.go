@@ -211,7 +211,19 @@ func evalAssignmentExpression(ae *ast.AssignmentExpression, env *object.Environm
 		}
 		if arr, ok := obj.(*object.Array); ok {
 			idx := int(index.(*object.Number).Value)
-			if idx >= 0 && idx < len(arr.Elements) {
+			if idx >= 0 {
+				// Expand array if needed
+				if idx >= len(arr.Elements) {
+					// Create new slice with enough capacity
+					newElements := make([]object.Object, idx+1)
+					// Copy existing elements
+					copy(newElements, arr.Elements)
+					// Fill gaps with undefined
+					for i := len(arr.Elements); i < idx; i++ {
+						newElements[i] = UNDEFINED
+					}
+					arr.Elements = newElements
+				}
 				arr.Elements[idx] = right
 			}
 			return right

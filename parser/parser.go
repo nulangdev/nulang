@@ -1176,6 +1176,8 @@ func (p *Parser) parseObjectLiteral() ast.Expression {
 		p.nextToken()
 		
 		var key ast.Expression
+		var value ast.Expression
+		isShorthand := false
 		
 		// Handle computed property names [expr]
 		if p.curTokenIs(token.LBRACKET) {
@@ -1186,16 +1188,28 @@ func (p *Parser) parseObjectLiteral() ast.Expression {
 			}
 		} else if p.curTokenIs(token.STRING) {
 			key = p.parseStringLiteral()
+		} else if p.curTokenIs(token.IDENT) {
+			// Check for shorthand property: { results } => { results: results }
+			identToken := p.curToken
+			key = &ast.StringLiteral{Token: identToken, Value: identToken.Literal}
+			
+			// If next token is not COLON, it's shorthand syntax
+			if !p.peekTokenIs(token.COLON) {
+				isShorthand = true
+				value = &ast.Identifier{Token: identToken, Value: identToken.Literal}
+			}
 		} else {
 			key = &ast.StringLiteral{Token: p.curToken, Value: p.curToken.Literal}
 		}
 
-		if !p.expectPeek(token.COLON) {
-			return nil
-		}
+		if !isShorthand {
+			if !p.expectPeek(token.COLON) {
+				return nil
+			}
 
-		p.nextToken()
-		value := p.parseExpression(LOWEST)
+			p.nextToken()
+			value = p.parseExpression(LOWEST)
+		}
 
 		obj.Pairs[key] = value
 
@@ -1245,6 +1259,11 @@ func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
 
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
+		// Check for trailing comma - if next token is the end token, break
+		if p.peekTokenIs(end) {
+			p.nextToken()
+			return list
+		}
 		p.nextToken()
 		list = append(list, p.parseExpression(ASSIGN))
 	}

@@ -107,6 +107,8 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.DeclareStatement:
 		// Declarations are type-only, just return undefined
 		return UNDEFINED
+	case *ast.AwaitExpression:
+		return evalAwaitExpression(node, env)
 	}
 	return UNDEFINED
 }
@@ -270,7 +272,11 @@ func evalThrowStatement(ts *ast.ThrowStatement, env *object.Environment) object.
 	if isError(val) {
 		return val
 	}
-	return &object.Error{Message: val.Inspect()}
+	
+	// If it's an Error instance (ObjectMap with message property), extract the message
+	message := getErrorMessage(val)
+	
+	return &object.Error{Message: message}
 }
 
 func evalTryStatement(ts *ast.TryStatement, env *object.Environment) object.Object {
@@ -278,7 +284,9 @@ func evalTryStatement(ts *ast.TryStatement, env *object.Environment) object.Obje
 	if isError(result) && ts.CatchBlock != nil {
 		catchEnv := object.NewEnclosedEnvironment(env)
 		if ts.CatchParam != nil {
-			catchEnv.Set(ts.CatchParam.Value, &object.String{Value: result.(*object.Error).Message})
+			// Create an Error object to pass to the catch block
+			errorObj := createErrorObject(result.(*object.Error).Message)
+			catchEnv.Set(ts.CatchParam.Value, errorObj)
 		}
 		result = Eval(ts.CatchBlock, catchEnv)
 	}
@@ -373,4 +381,35 @@ func evalTemplateLiteral(tl *ast.TemplateLiteral, env *object.Environment) objec
 	}
 	
 	return &object.String{Value: result}
+}
+
+// evalAwaitExpression evaluates an await expression
+func evalAwaitExpression(ae *ast.AwaitExpression, env *object.Environment) object.Object {
+	val := Eval(ae.Value, env)
+	if isError(val) {
+		return val
+	}
+	
+	// If it's a promise, unwrap it
+	if promise, ok := val.(*object.Promise); ok {
+		switch promise.State {
+		case "fulfilled":
+			return promise.Value
+		case "rejected":
+			if promise.Reason != nil {
+				if err, ok := promise.Reason.(*object.Error); ok {
+					return err
+				}
+				return newError(promise.Reason.Inspect())
+			}
+			return newError("Promise rejected")
+		default:
+			// Promise is pending - in a real implementation we'd wait
+			// For now, just return undefined
+			return UNDEFINED
+		}
+	}
+	
+	// If it's not a promise, just return the value directly
+	return val
 }

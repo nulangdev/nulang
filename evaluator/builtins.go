@@ -390,6 +390,9 @@ func initBuiltins() {
 
 	// process global object
 	builtins["process"] = initProcessObject()
+
+	// Error constructor
+	builtins["Error"] = initErrorConstructor()
 }
 
 func stringify(obj object.Object) string {
