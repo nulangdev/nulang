@@ -537,8 +537,8 @@ func (p *Parser) parseImportStatement() *ast.ImportStatement {
 	return stmt
 }
 
-func (p *Parser) parseImportNames() []*ast.Identifier {
-	names := []*ast.Identifier{}
+func (p *Parser) parseImportNames() []*ast.ImportName {
+	names := []*ast.ImportName{}
 
 	if p.peekTokenIs(token.RBRACE) {
 		p.nextToken()
@@ -546,12 +546,43 @@ func (p *Parser) parseImportNames() []*ast.Identifier {
 	}
 
 	p.nextToken()
-	names = append(names, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+	
+	// Parse first import name
+	importName := &ast.ImportName{
+		Token: p.curToken,
+		Name:  &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+	}
+	
+	// Check for 'as' alias
+	if p.peekTokenIs(token.AS) {
+		p.nextToken() // consume 'as'
+		if !p.expectPeek(token.IDENT) {
+			return nil
+		}
+		importName.Alias = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	}
+	
+	names = append(names, importName)
 
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
 		p.nextToken()
-		names = append(names, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+		
+		importName := &ast.ImportName{
+			Token: p.curToken,
+			Name:  &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+		}
+		
+		// Check for 'as' alias
+		if p.peekTokenIs(token.AS) {
+			p.nextToken() // consume 'as'
+			if !p.expectPeek(token.IDENT) {
+				return nil
+			}
+			importName.Alias = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		}
+		
+		names = append(names, importName)
 	}
 
 	if !p.expectPeek(token.RBRACE) {

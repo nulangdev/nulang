@@ -676,11 +676,25 @@ func (se *SpreadExpression) String() string {
 	return "..." + se.Value.String()
 }
 
+// ImportName represents a named import with optional alias
+type ImportName struct {
+	Token    token.Token
+	Name     *Identifier // Original name from module
+	Alias    *Identifier // Local name (if different from Name)
+}
+
+func (in *ImportName) String() string {
+	if in.Alias != nil && in.Alias.Value != in.Name.Value {
+		return in.Name.Value + " as " + in.Alias.Value
+	}
+	return in.Name.Value
+}
+
 // ImportStatement represents import statements
 type ImportStatement struct {
 	Token       token.Token
 	Default     *Identifier       // import x from "..."
-	Named       []*Identifier     // import { a, b } from "..."
+	Named       []*ImportName     // import { a, b } or { a as b } from "..."
 	NamespaceAs *Identifier       // import * as x from "..."
 	Source      *StringLiteral
 }

@@ -234,13 +234,18 @@ func evalImportStatement(is *ast.ImportStatement, env *object.Environment) objec
 			env.Set(is.Default.Value, moduleObj)
 		}
 	} else if len(is.Named) > 0 {
-		// import { a, b } from "module"
+		// import { a, b } or { a as b } from "module"
 		if modMap, ok := moduleObj.(*object.ObjectMap); ok {
-			for _, name := range is.Named {
-				if val, ok := modMap.Get(name.Value); ok {
-					env.Set(name.Value, val)
+			for _, importName := range is.Named {
+				if val, ok := modMap.Get(importName.Name.Value); ok {
+					// Use alias if present, otherwise use original name
+					localName := importName.Name.Value
+					if importName.Alias != nil {
+						localName = importName.Alias.Value
+					}
+					env.Set(localName, val)
 				} else {
-					return newError("module '%s' does not export '%s'", source, name.Value)
+					return newError("module '%s' does not export '%s'", source, importName.Name.Value)
 				}
 			}
 		}
