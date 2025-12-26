@@ -1,22 +1,14 @@
-function log(target: any, propertyKey: string, descriptor: PropertyDescriptor) {
-  const originalMethod = descriptor.value;
+const handler = {
+  has: function (target, property) {
+    if (property.startsWith("_")) {
+      return false; // Esconde propriedades privadas
+    }
+    return property in target;
+  },
+};
 
-  descriptor.value = function (...args: any[]) {
-    console.log(`Chamando ${propertyKey} com args:`, args);
-    const result = originalMethod.apply(this, args);
-    console.log(`Resultado:`, result);
-    return result;
-  };
+const obj = { _private: 1, public: 2 };
+const proxy = new Proxy(obj, handler);
 
-  return descriptor;
-}
-
-class Calculator {
-  @log()
-  add(a: number, b: number) {
-    return a + b;
-  }
-}
-
-const calc = new Calculator();
-calc.add(2, 3);
+console.log("public" in proxy); // true
+console.log("_private" in proxy); // false

@@ -918,8 +918,15 @@ func (p *Parser) tryParseArrowParams() []*ast.Identifier {
 	
 	params := []*ast.Identifier{}
 	
+	// Check for rest parameter at the start
+	isRest := false
+	if p.curTokenIs(token.SPREAD) {
+		isRest = true
+		p.nextToken()
+	}
+	
 	if p.curTokenIs(token.IDENT) {
-		params = append(params, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+		params = append(params, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal, IsRest: isRest})
 		
 		// Handle type annotation in arrow params
 		if p.peekTokenIs(token.COLON) {
@@ -930,13 +937,21 @@ func (p *Parser) tryParseArrowParams() []*ast.Identifier {
 		for p.peekTokenIs(token.COMMA) {
 			p.nextToken()
 			p.nextToken()
+			
+			// Check for rest parameter
+			isRest := false
+			if p.curTokenIs(token.SPREAD) {
+				isRest = true
+				p.nextToken()
+			}
+			
 			if !p.curTokenIs(token.IDENT) {
 				// Restore state - not arrow params
 				p.curToken = savedCur
 				p.peekToken = savedPeek
 				return nil
 			}
-			params = append(params, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal})
+			params = append(params, &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal, IsRest: isRest})
 
 			// Handle type annotation for subsequent arrow params
 			if p.peekTokenIs(token.COLON) {
@@ -1114,7 +1129,14 @@ func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 
 	p.nextToken()
 
-	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	// Check for rest parameter
+	isRest := false
+	if p.curTokenIs(token.SPREAD) {
+		isRest = true
+		p.nextToken()
+	}
+
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal, IsRest: isRest}
 	
 	// Handle optional type annotation: name: type
 	if p.peekTokenIs(token.COLON) {
@@ -1127,7 +1149,15 @@ func (p *Parser) parseFunctionParameters() []*ast.Identifier {
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
 		p.nextToken()
-		ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		
+		// Check for rest parameter
+		isRest := false
+		if p.curTokenIs(token.SPREAD) {
+			isRest = true
+			p.nextToken()
+		}
+		
+		ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal, IsRest: isRest}
 		
 		// Handle optional type annotation for subsequent parameters
 		if p.peekTokenIs(token.COLON) {
@@ -1501,6 +1531,15 @@ func (p *Parser) parseClassBody() *ast.ClassBody {
 // parseClassMember parses a class member (method or property)
 func (p *Parser) parseClassMember() *ast.ClassMember {
 	member := &ast.ClassMember{Token: p.curToken}
+	
+	// Check for decorators
+	for p.curTokenIs(token.AT) {
+		decorator := p.parseDecorator()
+		if decorator != nil {
+			member.Decorators = append(member.Decorators, decorator)
+		}
+		p.nextToken()
+	}
 	
 	// Check for modifiers: static, get, set, private, public, protected
 	for {

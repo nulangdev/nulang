@@ -63,7 +63,14 @@ func applyFunction(fn object.Object, args []object.Object) object.Object {
 func extendFunctionEnv(fn *object.Function, args []object.Object) *object.Environment {
 	env := object.NewEnclosedEnvironment(fn.Env)
 	for i, param := range fn.Parameters {
-		if i < len(args) {
+		if param.IsRest {
+			// Rest parameter: collect all remaining arguments into an array
+			restArgs := []object.Object{}
+			if i < len(args) {
+				restArgs = args[i:]
+			}
+			env.Set(param.Value, &object.Array{Elements: restArgs})
+		} else if i < len(args) {
 			env.Set(param.Value, args[i])
 		} else {
 			env.Set(param.Value, UNDEFINED)
@@ -160,6 +167,8 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 		return evalArrayProperty(o, propName)
 	case *object.String:
 		return evalStringProperty(o, propName)
+	case *object.Function:
+		return evalFunctionProperty(o, propName)
 	case *object.Buffer:
 		return evalBufferProperty(o, propName)
 	case *object.Promise:
@@ -172,6 +181,83 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 		// Access static members of a class
 		if val, ok := o.Static[propName]; ok {
 			return val
+		}
+	}
+	return UNDEFINED
+}
+
+func evalFunctionProperty(fn *object.Function, propName string) object.Object {
+	switch propName {
+	case "apply":
+		return &object.Builtin{
+			Fn: func(args ...object.Object) object.Object {
+				if len(args) < 2 {
+					return newError("apply requires at least 2 arguments: thisArg and argsArray")
+				}
+				thisArg := args[0]
+				argsArray := args[1] 
+				
+				var fnArgs []object.Object
+				if arr, ok := argsArray.(*object.Array); ok {
+					fnArgs = arr.Elements
+				} else {
+					return newError("apply expects second argument to be an array")
+				}
+				
+				// Create a bound version of the function with the given thisArg
+				// But simpler: just execute the body with a new env properly set up
+				
+				// We need to use extendFunctionEnv but also inject 'this'
+				// The clean way is to reuse applyFunction logic but modifying the env first?
+				// Actually createClassInstance logic was complex.
+				
+				// Let's create a temporary environment for execution
+				env := extendFunctionEnv(fn, fnArgs)
+				env.Set("this", thisArg)
+				
+				evaluated := Eval(fn.Body, env)
+				return unwrapReturnValue(evaluated)
+			},
+		}
+	case "call":
+		return &object.Builtin{
+			Fn: func(args ...object.Object) object.Object {
+				if len(args) < 1 {
+					return newError("call requires at least 1 argument: thisArg")
+				}
+				thisArg := args[0]
+				fnArgs := args[1:]
+				
+				env := extendFunctionEnv(fn, fnArgs)
+				env.Set("this", thisArg)
+				
+				evaluated := Eval(fn.Body, env)
+				return unwrapReturnValue(evaluated)
+			},
+		}
+	case "bind":
+		return &object.Builtin{
+			Fn: func(args ...object.Object) object.Object {
+				if len(args) < 1 {
+					return newError("bind requires at least 1 argument: thisArg")
+				}
+				thisArg := args[0]
+				boundArgs := args[1:]
+				
+				// Return a new function that calls the original one with fixed 'this' and prepended args
+				return &object.Builtin{
+					Fn: func(callArgs ...object.Object) object.Object {
+						// Merge bound args and call args
+						allArgs := append(boundArgs, callArgs...)
+						
+						env := extendFunctionEnv(fn, allArgs)
+						env.Set("this", thisArg)
+						
+						evaluated := Eval(fn.Body, env)
+						return unwrapReturnValue(evaluated)
+					},
+				}
+			},
 		}
 	}
 	return UNDEFINED

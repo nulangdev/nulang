@@ -738,6 +738,7 @@ undefined        // undefined
 {a: 1, b: 2}                 // object
 function(x) { return x; }    // function
 (x) => x * 2                 // arrow function
+function(...args) { }        // rest parameters
 Buffer.from("data")          // buffer
 Promise.resolve(42)          // promise
 ```
@@ -774,14 +775,24 @@ throw "error";
 
 ### Funções
 
-```javascript
+````javascript
 function add(a, b) {
   return a + b;
 }
 const mul = (a, b) => a * b;
 const inc = (x) => x + 1;
+const sum = (...args) => args.reduce((a, b) => a + b, 0); // rest parameters
 async function fetch() {}
-```
+
+### Métodos de Function
+
+```javascript
+fn.apply(thisArg, [args]);
+fn.call(thisArg, ...args);
+fn.bind(thisArg, ...args);
+````
+
+````
 
 ### Métodos de Array
 
@@ -793,7 +804,7 @@ arr.forEach(fn), arr.find(fn), arr.findIndex(fn);
 arr.includes(x), arr.indexOf(x);
 arr.slice(start, end), arr.concat(other);
 arr.join(sep), arr.reverse();
-```
+````
 
 ### Métodos de String
 

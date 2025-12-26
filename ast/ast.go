@@ -48,13 +48,19 @@ func (p *Program) String() string {
 
 // Identifier represents an identifier
 type Identifier struct {
-	Token token.Token
-	Value string
+	Token  token.Token
+	Value  string
+	IsRest bool // true if this is a rest parameter (...args)
 }
 
 func (i *Identifier) expressionNode()      {}
 func (i *Identifier) TokenLiteral() string { return i.Token.Literal }
-func (i *Identifier) String() string       { return i.Value }
+func (i *Identifier) String() string {
+	if i.IsRest {
+		return "..." + i.Value
+	}
+	return i.Value
+}
 
 // LetStatement represents a let statement
 type LetStatement struct {

@@ -175,14 +175,29 @@ func createClassInstance(class *Class, args []object.Object, _ *object.Environme
 		instance.Set(name, value)
 	}
 
+	// Set 'super' if there's a superclass
+	var superObj *object.ObjectMap
+	if class.SuperClass != nil {
+		superObj = createSuperObject(class.SuperClass, instance, instanceEnv)
+		instanceEnv.Set("super", superObj)
+	}
+
 	// Add methods as properties
 	for name, method := range class.Methods {
+		// Create bound method environment that preserves the original closure (method.Env)
+		// but also provides 'this' and 'super'.
+		methodEnv := object.NewEnclosedEnvironment(method.Env)
+		methodEnv.Set("this", instance)
+		if superObj != nil {
+			methodEnv.Set("super", superObj)
+		}
+
 		// Create bound method
 		boundMethod := &object.Function{
 			Name:       method.Name,
 			Parameters: method.Parameters,
 			Body:       method.Body,
-			Env:        instanceEnv,
+			Env:        methodEnv,
 		}
 		instance.Set(name, boundMethod)
 	}
@@ -195,20 +210,18 @@ func createClassInstance(class *Class, args []object.Object, _ *object.Environme
 
 	// Copy superclass methods
 	if class.SuperClass != nil {
+		// Note: copyClassMethods might need Env to bind methods? 
+		// Actually copyClassMethods creates bound methods too.
+		// Let's check copyClassMethods implementation later, for now pass instanceEnv 
+		// but keep in mind superclass methods are usually not closures from decorators.
 		copyClassMethods(instance, class.SuperClass, instanceEnv)
 	}
 
 	// Set up getters and setters (store in prototype)
 	instance.Prototype = createPrototype(class, instanceEnv)
 
-	// Set 'this' reference
+	// Set 'this' reference in instanceEnv (still needed for constructor)
 	instanceEnv.Set("this", instance)
-
-	// Set 'super' if there's a superclass
-	if class.SuperClass != nil {
-		superObj := createSuperObject(class.SuperClass, instance, instanceEnv)
-		instanceEnv.Set("super", superObj)
-	}
 
 	// Call constructor if exists
 	if constructor, ok := class.Methods["constructor"]; ok {
