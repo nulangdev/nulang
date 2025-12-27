@@ -1,38 +1,61 @@
 # Nulang 🚀
 
-Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go.
+Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pensada para ser leve, embutível e com uma biblioteca padrão rica inspirada no Node.js.
 
-## Características
+## Visão geral
 
-- ✅ Sintaxe JavaScript/Node.js
-- ✅ Tipos primitivos: `number`, `string`, `boolean`, `null`, `undefined`
-- ✅ Tipos estruturais: `Array`, `Object`, `Function`, `Buffer`, `Promise`
-- ✅ Variáveis: `let`, `const`, `var`
-- ✅ Funções: `function`, arrow functions (`=>`)
-- ✅ Controle de fluxo: `if/else`, `for`, `while`, `break`, `continue`
-- ✅ Tratamento de erros: `try/catch/finally`, `throw`
-- ✅ Operadores: aritméticos, comparação, lógicos, ternário, nullish coalescing
-- ✅ Métodos de Array: `push`, `pop`, `map`, `filter`, `reduce`, `forEach`, `find`, etc.
-- ✅ Métodos de String: `toUpperCase`, `toLowerCase`, `split`, `trim`, `indexOf`, etc.
-- ✅ Objetos globais: `console`, `Math`, `JSON`, `Array`, `Object`, `Buffer`, `Promise`
-- ✅ Sistema de módulos: `require()`, `exports`, `module.exports`
-- ✅ Módulo `fs` - Sistema de arquivos (readFileSync, writeFileSync, etc.)
-- ✅ Módulo `path` - Manipulação de paths (join, dirname, basename, etc.)
-- ✅ Módulo `crypto` - Criptografia (createHash, createHmac, randomBytes, randomUUID)
-- ✅ `Buffer` - Manipulação de dados binários
-- ✅ `Promise` - Promises síncronas (resolve, reject, all, race, then, catch, finally)
-- ✅ REPL interativo
-- ✅ Variáveis `__filename` e `__dirname`
-- ✅ Objeto `process` (argv, env, cwd, exit)
-- ✅ **Classes ES6** - `class`, `constructor`, `extends`, `static`, getters/setters
-- ✅ **HTTP/HTTPS** - `http.get`, `http.post`, `fetch`
-- ✅ **Timers** - `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep`
-- ✅ **Streams** - `stream.Readable`, `stream.Writable`, `stream.Transform`
-- ✅ **URL/QueryString** - `url.parse`, `querystring.stringify/parse`
-- ✅ **Interfaces/Types** - Parsing de tipos TypeScript-like (não enforced)
-- ✅ **RegExp** - Regular expressions com `test`, `match`, `replace`, `split`
-- ✅ **Date** - Date object com todos os métodos padrão
-- ✅ **Map/Set** - Map, Set, WeakMap, WeakSet com operações completas
+- **Pipeline completo**: Lexer ➜ Parser (Pratt) ➜ AST ➜ Evaluator ➜ Event Loop básico.
+- **Execução flexível**: rode arquivos `.nu`, use o REPL interativo ou o modo watch para desenvolvimento.
+- **Compatível com JS**: sintaxe, tipos e APIs modeladas no ecossistema Node.js sempre que possível.
+
+## Funcionalidades
+
+### Linguagem
+- Sintaxe JavaScript/Node.js com `let`, `const`, `var`, funções tradicionais e **arrow functions**.
+- Controle de fluxo: `if/else`, `for`, `while`, `break`, `continue` e operador ternário.
+- Tratamento de erros: `try/catch/finally` e `throw` com objeto **Error**.
+- **Classes ES6**: `class`, `constructor`, `extends`, `static`, **getters/setters** e suporte a decorators.
+- Operadores: aritméticos, comparação, lógicos, **nullish coalescing**, atribuição composta e incremento/decremento.
+- Literais e tipos: `number`, `string`, `boolean`, `null`, `undefined`, template literals, arrays, objetos e parsing opcional de tipos estilo TypeScript.
+- **RegExp**, **Date**, **Map/Set/WeakMap/WeakSet** com API completa.
+
+### Runtime e objetos globais
+- Objetos globais: `console`, `Math`, `JSON`, `Array`, `Object`, `Buffer`, `Promise`, `Reflect`, `Proxy`.
+- Variáveis especiais: `__filename`, `__dirname` e **process** (argv, env, cwd, exit, stdin/stdout/stderr básicos).
+- **Promises síncronas** com `resolve`, `reject`, `all`, `race`, `then`, `catch`, `finally`.
+- Event loop essencial com **Timers** (`setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep`).
+
+### Biblioteca padrão
+- **Módulos de núcleo** (via `require` ou `import`):
+  - `fs` e `path` – leitura/escrita de arquivos, diretórios, stat, paths, workdir.
+  - `crypto` – `createHash`, `createHmac`, `randomBytes`, `randomUUID` e utilitários.
+  - `buffer` – criação, conversão e manipulação de dados binários.
+  - `http`/`https` e `fetch` – servidor e cliente HTTP, headers, métodos e body streaming.
+  - `os`, `process`, `child_process` – informações do SO, processo atual e execução de comandos.
+  - `events` – `EventEmitter` compatível.
+  - `stream` – `Readable`, `Writable`, `Transform` com piping.
+  - `timers` – helpers para temporizadores (interno ao runtime).
+  - `url` e `querystring` – parsing/formatting de URLs e query strings.
+  - `assert` – asserções para testes.
+  - `dns`, `net`, `dgram` – networking TCP/UDP/DNS.
+  - `zlib` – compressão/descompressão.
+  - `readline` – CLI interativo.
+  - `vm` – execução dinâmica de código.
+  - `util` – `promisify`, `inspect`, `format`, `types`.
+  - `package` – utilidades de gerenciamento de pacotes.
+- **Blob/File** e **Buffer** para arquivos e binários, com conversões para `hex`, `base64`, etc.
+- **Streams** com suporte a backpressure e transformação.
+- **HTTP/HTTPS** com suporte a headers, métodos, corpo de resposta e fetch-like API.
+
+### Sistema de módulos
+- Suporte a **CommonJS** (`require`, `exports`, `module.exports`) e **ES Modules** (`import/export`).
+- Resolução de caminhos relativa e absoluta, com cache de módulos carregados.
+- Variáveis de contexto por módulo: `__filename`, `__dirname`, `module`, `exports`, `require`.
+
+### Ferramentas de desenvolvimento
+- **REPL interativo** com ajuda integrada.
+- **Watch mode** (`go run watch.go <arquivo.nu>`) recompila e reexecuta automaticamente.
+- Exemplos em `examples/` cobrindo sintaxe básica, módulos, ES6 e novos recursos.
 
 ## Instalação
 
@@ -44,25 +67,25 @@ cd nulang
 # Compile
 go build -o nulang .
 
-# (Opcional) Instale globalmente
+# (Opcional) instale no GOPATH/bin
 go install
 ```
 
 ## Uso
 
-### Executando arquivos
+### Executar arquivo
 
 ```bash
-nulang arquivo.nu
+./nulang arquivo.nu
 ```
 
-### REPL Interativo
+### REPL interativo
 
 ```bash
-nulang
+./nulang
 ```
 
-```
+```text
 Nulang v0.1.0 - JavaScript-like language written in Go
 Type 'exit' to quit, 'help' for more info
 
@@ -72,7 +95,13 @@ nulang> console.log(x * 2)
 nulang> exit
 ```
 
-## Exemplos
+### Watch mode
+
+```bash
+go run watch.go examples/example.nu
+```
+
+## Exemplos rápidos
 
 ### Hello World
 
@@ -80,176 +109,29 @@ nulang> exit
 console.log("Hello, World!");
 ```
 
-### Variáveis
+### Funções e arrow functions
 
 ```javascript
-let nome = "Nulang";
-const versao = "0.1.0";
-var contador = 0;
-
-console.log(nome, versao);
-```
-
-### Funções
-
-```javascript
-// Função tradicional
 function soma(a, b) {
   return a + b;
 }
 
-// Arrow function
 const multiplica = (a, b) => a * b;
 
 console.log(soma(5, 3)); // 8
 console.log(multiplica(4, 7)); // 28
 ```
 
-### Arrays
+### Arrays e métodos utilitários
 
 ```javascript
 let numeros = [1, 2, 3, 4, 5];
-
-// Map
-let dobrados = numeros.map((n) => n * 2);
-console.log(dobrados); // [2, 4, 6, 8, 10]
-
-// Filter
-let pares = numeros.filter((n) => n % 2 === 0);
-console.log(pares); // [2, 4]
-
-// Reduce
-let soma = numeros.reduce((acc, n) => acc + n, 0);
-console.log(soma); // 15
+console.log(numeros.map((n) => n * 2));
+console.log(numeros.filter((n) => n % 2 === 0));
+console.log(numeros.reduce((acc, n) => acc + n, 0));
 ```
 
-### Objetos
-
-```javascript
-let pessoa = {
-  nome: "João",
-  idade: 30,
-  cidade: "São Paulo",
-};
-
-console.log(pessoa.nome); // João
-console.log(pessoa["idade"]); // 30
-```
-
-### Controle de Fluxo
-
-```javascript
-// If/Else
-let idade = 20;
-if (idade >= 18) {
-  console.log("Maior de idade");
-} else {
-  console.log("Menor de idade");
-}
-
-// For loop
-for (let i = 0; i < 5; i++) {
-  console.log(i);
-}
-
-// While loop
-let contador = 5;
-while (contador > 0) {
-  console.log(contador);
-  contador--;
-}
-```
-
-### Sistema de Arquivos (fs)
-
-```javascript
-// Escrever arquivo
-fs.writeFileSync("arquivo.txt", "Conteúdo do arquivo");
-
-// Ler arquivo
-let conteudo = fs.readFileSync("arquivo.txt", "utf8");
-console.log(conteudo);
-
-// Verificar se existe
-console.log(fs.existsSync("arquivo.txt")); // true
-
-// Informações do arquivo
-let stats = fs.statSync("arquivo.txt");
-console.log(stats.size); // tamanho em bytes
-console.log(stats.isFile()); // true
-console.log(stats.isDirectory()); // false
-
-// Criar diretório
-fs.mkdirSync("pasta", { recursive: true });
-
-// Listar diretório
-console.log(fs.readdirSync(".")); // ['arquivo.txt', 'pasta', ...]
-
-// Deletar arquivo
-fs.unlinkSync("arquivo.txt");
-```
-
-### Criptografia (crypto)
-
-```javascript
-// Hash SHA256
-let hash = crypto.createHash("sha256");
-hash.update("Hello, World!");
-console.log(hash.digest("hex"));
-
-// HMAC
-let hmac = crypto.createHmac("sha256", "secret-key");
-hmac.update("message");
-console.log(hmac.digest("hex"));
-
-// Bytes aleatórios
-let bytes = crypto.randomBytes(16);
-console.log(bytes.toString("hex"));
-
-// UUID aleatório
-console.log(crypto.randomUUID());
-```
-
-### Buffer
-
-```javascript
-// Criar buffer de string
-let buf = Buffer.from("Hello");
-console.log(buf.toString()); // Hello
-console.log(buf.toString("hex")); // 48656c6c6f
-console.log(buf.toString("base64")); // SGVsbG8=
-
-// Criar buffer de array
-let buf2 = Buffer.from([72, 101, 108, 108, 111]);
-console.log(buf2.toString()); // Hello
-
-// Alocar buffer
-let buf3 = Buffer.alloc(10, 0);
-buf3.fill(65);
-console.log(buf3.toString()); // AAAAAAAAAA
-```
-
-### Promises
-
-```javascript
-// Promise.resolve
-let p1 = Promise.resolve(42);
-console.log(p1.value); // 42
-
-// then/catch
-let result = p1.then((x) => x * 2);
-console.log(result.value); // 84
-
-// Promise.all
-let all = Promise.all([
-  Promise.resolve(1),
-  Promise.resolve(2),
-  Promise.resolve(3),
-]);
-console.log(all.value); // [1, 2, 3]
-```
-
-### Módulos
+### Módulos CommonJS
 
 ```javascript
 // math_utils.nu
@@ -258,65 +140,69 @@ exports.PI = 3.14159;
 
 // main.nu
 let math = require("./math_utils.nu");
-console.log(math.add(5, 3)); // 8
-console.log(math.PI); // 3.14159
+console.log(math.add(5, 3));
+console.log(math.PI);
 ```
 
-## Estrutura do Projeto
+### Filesystem e Buffer
 
+```javascript
+fs.writeFileSync("arquivo.txt", "Conteúdo");
+let data = fs.readFileSync("arquivo.txt", "utf8");
+console.log(data);
+
+let buf = Buffer.from("Hello");
+console.log(buf.toString("hex"));
 ```
+
+### HTTP e fetch
+
+```javascript
+http.get("https://example.com", (res) => {
+  res.on("data", (chunk) => console.log(chunk.toString()));
+});
+
+let response = await fetch("https://example.com");
+console.log(response.status);
+```
+
+## Estrutura do projeto
+
+```text
 nulang/
-├── main.go           # Ponto de entrada, CLI e REPL
-├── token/
-│   └── token.go      # Definição de tokens
-├── lexer/
-│   └── lexer.go      # Analisador léxico
-├── ast/
-│   └── ast.go        # Árvore Sintática Abstrata
-├── parser/
-│   └── parser.go     # Analisador sintático (Pratt Parser)
-├── object/
-│   ├── object.go     # Sistema de objetos do runtime
-│   └── environment.go # Ambientes (scopes)
-├── evaluator/
-│   ├── evaluator.go  # Avaliador principal
-│   ├── operators.go  # Operadores
-│   ├── functions.go  # Funções e expressões
-│   ├── array_methods.go # Métodos de Array
-│   ├── string_methods.go # Métodos de String
-│   ├── builtins.go   # Funções e objetos built-in
-│   ├── modules.go    # Sistema de módulos
-│   ├── fs.go         # Módulo fs e path
-│   ├── crypto.go     # Módulo crypto
-│   ├── buffer.go     # Buffer
-│   └── promise.go    # Promises
-└── examples/
-    ├── example.nu    # Exemplo completo
-    ├── simple.nu     # Exemplo simples
-    ├── new_features.nu # Novos recursos
-    └── modules/      # Exemplos de módulos
+├── main.go              # Entrada do CLI/REPL
+├── watch.go             # Watch mode
+├── token/               # Definição de tokens
+├── lexer/               # Lexer
+├── ast/                 # Nós da AST
+├── parser/              # Parser (Pratt)
+├── object/              # Sistema de objetos e environment
+├── evaluator/           # Avaliador, operadores, built-ins e módulos
+├── doc/                 # Documentação detalhada (Arrays, Strings, HTTP, etc.)
+├── examples/            # Exemplos de uso
+└── docs/                # Documentação adicional e releases
 ```
 
-## Roadmap
+## Roadmap e limitações
 
-- [x] Classes e herança ✅
-- [ ] Async/Await (assíncrono real)
-- [x] Import/Export ES6 syntax ✅
-- [x] HTTP/HTTPS client ✅
-- [x] Regular Expressions ✅
-- [x] Date ✅
-- [x] Map e Set ✅
-- [x] Timers (setTimeout, setInterval) ✅
-- [x] Streams ✅
+- ✅ Classes e herança
+- ✅ Import/Export ES6
+- ✅ HTTP/HTTPS client & server
+- ✅ Streams, timers, EventEmitter
+- ✅ RegExp, Date, Map/Set
+- ⚠️ Promises são síncronas (sem event loop real)
+- ⏳ Async/Await assíncrono real (futuro)
+
+## Recursos adicionais
+
+- Documentação completa em `doc/` (arrays, strings, promessas, streams, HTTP, eventos, fs, crypto, etc.).
+- Exemplos em `examples/` cobrindo módulos, ES6, novas APIs e funcionalidades avançadas.
+- Histórico de releases em `RELEASE.md` e notas rápidas em `QUICKSTART.md`.
 
 ## Licença
 
-MIT License
-
-## Contribuindo
-
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.
+MIT License.
 
 ---
 
-Feito com ❤️ em Go
+Feito com ❤️ em Go.
