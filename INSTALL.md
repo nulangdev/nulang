@@ -61,19 +61,19 @@ Escolha o binário para sua plataforma:
 **macOS (Apple Silicon):**
 
 ```bash
-curl -L https://github.com/nulangdev/nulang/releases/latest/download/nulang-darwin-arm64 -o nulang
+curl -L https://github.com/nulangdev/nulang/releases/download/nulang-darwin-arm64 -o nulang
 ```
 
 **macOS (Intel):**
 
 ```bash
-curl -L https://github.com/nulangdev/nulang/releases/latest/download/nulang-darwin-amd64 -o nulang
+curl -L https://github.com/nulangdev/nulang/releases/download/nulang-darwin-amd64 -o nulang
 ```
 
 **Linux (x64):**
 
 ```bash
-curl -L https://github.com/nulangdev/nulang/releases/latest/download/nulang-linux-amd64 -o nulang
+curl -L https://github.com/nulangdev/nulang/releases/download/nulang-linux-amd64 -o nulang
 ```
 
 **Linux (ARM64):**

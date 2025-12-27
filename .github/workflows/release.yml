@@ -39,16 +39,16 @@ jobs:
       - name: Build binaries
         run: |
           # macOS ARM64
-          GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-darwin-arm64 .
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o releases/download/nulang-darwin-arm64 .
 
           # macOS AMD64
-          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-darwin-amd64 .
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o releases/download/nulang-darwin-amd64 .
 
           # Linux ARM64
-          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-linux-arm64 .
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o releases/download/nulang-linux-arm64 .
 
           # Linux AMD64
-          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-linux-amd64 .
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o releases/download/nulang-linux-amd64 .
 
       - name: Generate checksums
         run: |
@@ -60,7 +60,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            dist/*
+            releases/download/*
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -110,10 +110,10 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
 
           # Calcular checksums
-          SHA_DARWIN_ARM64=$(sha256sum dist/nulang-darwin-arm64 | awk '{print $1}')
-          SHA_DARWIN_AMD64=$(sha256sum dist/nulang-darwin-amd64 | awk '{print $1}')
-          SHA_LINUX_ARM64=$(sha256sum dist/nulang-linux-arm64 | awk '{print $1}')
-          SHA_LINUX_AMD64=$(sha256sum dist/nulang-linux-amd64 | awk '{print $1}')
+          SHA_DARWIN_ARM64=$(sha256sum releases/download/nulang-darwin-arm64 | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(sha256sum releases/download/nulang-darwin-amd64 | awk '{print $1}')
+          SHA_LINUX_ARM64=$(sha256sum releases/download/nulang-linux-arm64 | awk '{print $1}')
+          SHA_LINUX_AMD64=$(sha256sum releases/download/nulang-linux-amd64 | awk '{print $1}')
 
           # Atualizar fórmula
           sed -i "s/version \".*\"/version \"${VERSION#v}\"/" nulang.rb

@@ -48,7 +48,7 @@ docs/
 │   ├── main.jsx          # Entry point
 │   └── index.css         # Estilos globais (Tailwind)
 ├── public/               # Arquivos estáticos
-└── dist/                 # Build de produção (gerado)
+└── releases/download/                 # Build de produção (gerado)
 ```
 
 ## 📝 Adicionando Nova Documentação
