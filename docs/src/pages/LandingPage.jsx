@@ -378,7 +378,9 @@ export default function LandingPage() {
                     Instalação via script:
                   </p>
                   <div className="bg-slate-950 rounded-lg p-4 font-mono text-sm text-slate-200 border border-slate-800">
-                    curl -fsSL https://nulang.dev/install.sh | sh
+                    curl -fsSL
+                    https://raw.githubusercontent.com/nulangdev/nulang/main/install.sh
+                    | bash
                   </div>
                 </div>
 
@@ -387,7 +389,7 @@ export default function LandingPage() {
                     Ou baixe o binário:
                   </p>
                   <div className="bg-slate-950 rounded-lg p-4 font-mono text-sm text-slate-200 border border-slate-800">
-                    wget https://github.com/othiagobruno/nulang/releases/latest
+                    wget https://github.com/nulangdev/nulang/releases/latest
                   </div>
                 </div>
 
@@ -423,7 +425,7 @@ export default function LandingPage() {
               icon={<Github className="w-8 h-8" />}
               title="GitHub"
               description="Contribua com o projeto open source"
-              link="https://github.com/othiagobruno/nulang"
+              link="https://github.com/nulangdev/nulang"
             />
             <CommunityCard
               icon={<Users className="w-8 h-8" />}

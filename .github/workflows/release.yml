@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.21"
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=$(git describe --tags --always)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Build binaries
+        run: |
+          # macOS ARM64
+          GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-darwin-arm64 .
+
+          # macOS AMD64
+          GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-darwin-amd64 .
+
+          # Linux ARM64
+          GOOS=linux GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-linux-arm64 .
+
+          # Linux AMD64
+          GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o dist/nulang-linux-amd64 .
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 🚀 Instalação Rápida
+
+            ### Via Script (Recomendado)
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/nulangdev/nulang/main/install.sh | bash
+            ```
+
+            ### Via Homebrew
+            ```bash
+            brew tap nulangdev/nulang
+            brew install nulang
+            ```
+
+            ### Download Manual
+
+            Escolha o binário para sua plataforma:
+
+            - **macOS (Apple Silicon)**: `nulang-darwin-arm64`
+            - **macOS (Intel)**: `nulang-darwin-amd64`
+            - **Linux (x64)**: `nulang-linux-amd64`
+            - **Linux (ARM64)**: `nulang-linux-arm64`
+
+            Após o download:
+            ```bash
+            chmod +x nulang-*
+            sudo mv nulang-* /usr/local/bin/nulang
+            ```
+
+            ## 📝 Verificar Checksums
+
+            Veja o arquivo `checksums.txt` para verificar a integridade dos binários.
+
+            ## 📚 Documentação
+
+            - [Guia de Instalação](https://github.com/nulangdev/nulang/blob/main/INSTALL.md)
+            - [Documentação Completa](https://github.com/nulangdev/nulang/tree/main/doc)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Homebrew Formula
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+
+          # Calcular checksums
+          SHA_DARWIN_ARM64=$(sha256sum dist/nulang-darwin-arm64 | awk '{print $1}')
+          SHA_DARWIN_AMD64=$(sha256sum dist/nulang-darwin-amd64 | awk '{print $1}')
+          SHA_LINUX_ARM64=$(sha256sum dist/nulang-linux-arm64 | awk '{print $1}')
+          SHA_LINUX_AMD64=$(sha256sum dist/nulang-linux-amd64 | awk '{print $1}')
+
+          # Atualizar fórmula
+          sed -i "s/version \".*\"/version \"${VERSION#v}\"/" nulang.rb
+          sed -i "s/REPLACE_WITH_ACTUAL_SHA256_FOR_ARM_MAC/$SHA_DARWIN_ARM64/" nulang.rb
+          sed -i "s/REPLACE_WITH_ACTUAL_SHA256_FOR_INTEL_MAC/$SHA_DARWIN_AMD64/" nulang.rb
+          sed -i "s/REPLACE_WITH_ACTUAL_SHA256_FOR_LINUX_INTEL/$SHA_LINUX_AMD64/" nulang.rb
+          sed -i "s/REPLACE_WITH_ACTUAL_SHA256_FOR_LINUX_ARM/$SHA_LINUX_ARM64/" nulang.rb
+
+          echo "Homebrew formula updated!"
+          cat nulang.rb

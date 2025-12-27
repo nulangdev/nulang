@@ -54,7 +54,7 @@ export default function DocsPage() {
                 Home
               </Link>
               <a
-                href="https://github.com/othiagobruno/nulang"
+                href="https://github.com/nulangdev/nulang"
                 target="_blank"
                 rel="noreferrer"
                 className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-full text-sm font-medium transition-all"
