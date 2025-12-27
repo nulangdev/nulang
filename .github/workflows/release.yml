@@ -52,7 +52,7 @@ jobs:
 
       - name: Generate checksums
         run: |
-          cd dist
+          cd releases/download
           sha256sum * > checksums.txt
           cat checksums.txt
 

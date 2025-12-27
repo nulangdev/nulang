@@ -11,7 +11,7 @@ LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
 
 # Diretórios
 INSTALL_DIR=/usr/local/bin
-DIST_DIR=dist
+DIST_DIR=releases/download
 
 # Cores para output
 GREEN=\033[0;32m
