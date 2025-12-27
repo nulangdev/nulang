@@ -4,7 +4,7 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 
 ## Visão geral
 
-- **Pipeline completo**: Lexer ➜ Parser (Pratt) ➜ AST ➜ Evaluator ➜ Event Loop básico.
+- **Pipeline completo**: Lexer ➜ Parser (Pratt) ➜ AST ➜ Evaluator ➜ Event Loop completo.
 - **Execução flexível**: rode arquivos `.nu`, use o REPL interativo ou o modo watch para desenvolvimento.
 - **Compatível com JS**: sintaxe, tipos e APIs modeladas no ecossistema Node.js sempre que possível.
 
@@ -22,8 +22,8 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 ### Runtime e objetos globais
 - Objetos globais: `console`, `Math`, `JSON`, `Array`, `Object`, `Buffer`, `Promise`, `Reflect`, `Proxy`.
 - Variáveis especiais: `__filename`, `__dirname` e **process** (argv, env, cwd, exit, stdin/stdout/stderr básicos).
-- **Promises síncronas** com `resolve`, `reject`, `all`, `race`, `then`, `catch`, `finally`.
-- Event loop essencial com **Timers** (`setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep`).
+- **Promises realmente assíncronas** com `resolve`, `reject`, `all`, `race`, `then`, `catch`, `finally`.
+- Event loop completo com **Timers** (`setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep`) e integração com Promises.
 
 ### Biblioteca padrão
 - **Módulos de núcleo** (via `require` ou `import`):
@@ -73,6 +73,23 @@ go install
 
 ## Uso
 
+### CLI e gerenciamento de pacotes
+
+```bash
+# Criar um novo projeto (gera nulang.yml)
+./nulang init
+
+# Instalar dependências listadas em nulang.yml e gerar/atualizar nulang.lock
+./nulang install
+
+# Rodar um arquivo normalmente
+./nulang caminho/para/arquivo.nu
+```
+
+- **nulang.yml**: manifest YAML com `name`, `version`, `main` e `dependencies`.
+- **nulang.lock**: lockfile gerado automaticamente contendo URL, commit e checksum de cada dependência instalada.
+- **.nu_modules/**: diretório onde os pacotes baixados são armazenados (semelhante ao `node_modules`).
+
 ### Executar arquivo
 
 ```bash
@@ -99,6 +116,46 @@ nulang> exit
 
 ```bash
 go run watch.go examples/example.nu
+```
+
+### Estrutura de pacote
+
+```yaml
+# nulang.yml
+name: meu-projeto
+version: 1.0.0
+main: index.nu
+dependencies:
+  math-tools: https://github.com/exemplo/math-tools
+  http-utils: https://github.com/exemplo/http-utils
+```
+
+```text
+meu-projeto/
+├── nulang.yml          # manifest (criado por ./nulang init)
+├── nulang.lock         # lockfile (criado/atualizado por ./nulang install)
+├── .nu_modules/        # pacotes instalados
+│   └── math-tools/
+│       └── index.nu
+├── index.nu
+└── lib/
+    └── api.nu
+```
+
+### Exemplos de uso real com pacotes
+
+```javascript
+// index.nu
+import math from "math-tools";          // resolvido a partir de .nu_modules
+import { request } from "http-utils";  // usa fetch e event loop completo
+
+async function main() {
+  const doubled = math.times(21, 2);
+  const res = await request({ url: "https://api.example.com/ping" });
+  console.log({ doubled, status: res.status });
+}
+
+main();
 ```
 
 ## Exemplos rápidos
@@ -190,8 +247,8 @@ nulang/
 - ✅ HTTP/HTTPS client & server
 - ✅ Streams, timers, EventEmitter
 - ✅ RegExp, Date, Map/Set
-- ⚠️ Promises são síncronas (sem event loop real)
-- ⏳ Async/Await assíncrono real (futuro)
+- ✅ Promises com event loop completo
+- ⏳ Async/Await com scheduling mais avançado (futuro)
 
 ## Recursos adicionais
 
