@@ -1,25 +1,25 @@
 class Nulang < Formula
   desc "Runtime JavaScript moderno compatível com Node.js, escrito em Go"
   homepage "https://github.com/nulangdev/nulang"
-  version "1.0.0"
+  version "0.1"
   
   on_macos do
     if Hardware::CPU.intel?
       url "https://github.com/nulangdev/nulang/releases/download/v#{version}/nulang-darwin-amd64"
-      sha256 "REPLACE_WITH_ACTUAL_SHA256_FOR_INTEL_MAC"
+      sha256 "a8bd05aec45d9d7187418b35d7a2ab6663358962bc2514fe3c58db29602de975"
     elsif Hardware::CPU.arm?
       url "https://github.com/nulangdev/nulang/releases/download/v#{version}/nulang-darwin-arm64"
-      sha256 "REPLACE_WITH_ACTUAL_SHA256_FOR_ARM_MAC"
+      sha256 "163e3305b40392d96ebe48d1b9aac13bae47c339279ddb75f3078e03925eb84f"
     end
   end
 
   on_linux do
     if Hardware::CPU.intel?
       url "https://github.com/nulangdev/nulang/releases/download/v#{version}/nulang-linux-amd64"
-      sha256 "REPLACE_WITH_ACTUAL_SHA256_FOR_LINUX_INTEL"
+      sha256 "792e2b556ac42de9aeb427cd5cd783827c96b9304849bfdb75b438acb680c20d"
     elsif Hardware::CPU.arm?
       url "https://github.com/nulangdev/nulang/releases/download/v#{version}/nulang-linux-arm64"
-      sha256 "REPLACE_WITH_ACTUAL_SHA256_FOR_LINUX_ARM"
+      sha256 "c7940575e2bfa68a3356bb36994df76366c86acbca505db5cf2dab1da3f264c6"
     end
   end
 
