@@ -51,7 +51,7 @@ NULANG_BIN="$INSTALL_DIR/nulang"
 # URL do binário (você precisará hospedar o binário em algum lugar)
 GITHUB_REPO="nulangdev/nulang"
 VERSION="latest"
-BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/nulang-${OS}-${ARCH}"
+BINARY_URL="https://github.com/${GITHUB_REPO}/dist/${VERSION}/nulang-${OS}-${ARCH}"
 
 # Verificar se já está instalado
 if [ -f "$NULANG_BIN" ]; then
