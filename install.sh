@@ -48,10 +48,22 @@ fi
 INSTALL_DIR="/usr/local/bin"
 NULANG_BIN="$INSTALL_DIR/nulang"
 
-# URL do binário (você precisará hospedar o binário em algum lugar)
+# URL do binário
 GITHUB_REPO="nulangdev/nulang"
-VERSION="latest"
+
+# Buscar a última versão da API do GitHub
+echo -e "${BLUE}➜ Buscando última versão...${NC}"
+VERSION=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+
+if [ -z "$VERSION" ]; then
+    echo -e "${RED}✗ Não foi possível obter a versão mais recente${NC}"
+    echo -e "${YELLOW}ℹ Tentando com a versão padrão v1.0.0...${NC}"
+    VERSION="v1.0.0"
+fi
+
+echo -e "${GREEN}➜ Versão encontrada: ${VERSION}${NC}"
 BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/nulang-${OS}-${ARCH}"
+
 
 # Verificar se já está instalado
 if [ -f "$NULANG_BIN" ]; then

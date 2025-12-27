@@ -38,6 +38,8 @@ jobs:
 
       - name: Build binaries
         run: |
+          mkdir -p releases/download
+
           # macOS ARM64
           GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o releases/download/nulang-darwin-arm64 .
 
@@ -50,6 +52,9 @@ jobs:
           # Linux AMD64
           GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${{ steps.version.outputs.version }}" -o releases/download/nulang-linux-amd64 .
 
+          # Listar arquivos gerados
+          ls -lh releases/download/
+
       - name: Generate checksums
         run: |
           cd releases/download
@@ -60,7 +65,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            releases/download/*
+            releases/download/nulang-darwin-arm64
+            releases/download/nulang-darwin-amd64
+            releases/download/nulang-linux-arm64
+            releases/download/nulang-linux-amd64
+            releases/download/checksums.txt
           draft: false
           prerelease: false
           generate_release_notes: true

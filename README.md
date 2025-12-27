@@ -38,7 +38,7 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go.
 
 ```bash
 # Clone o repositório
-git clone https://github.com/nulang/nulang.git
+git clone https://github.com/nulangdev/nulang.git
 cd nulang
 
 # Compile
