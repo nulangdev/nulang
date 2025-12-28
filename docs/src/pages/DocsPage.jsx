@@ -14,14 +14,21 @@ export default function DocsPage() {
   const currentSlug = slug || "README";
 
   useEffect(() => {
-    fetch(`/src/content/${currentSlug}.md`)
-      .then((res) => res.text())
-      .then((text) => setMarkdown(text))
-      .catch(() =>
+    // Usar import dinâmico do Vite para carregar arquivos markdown
+    const loadMarkdown = async () => {
+      try {
+        // Importar o arquivo markdown usando import dinâmico
+        const module = await import(`../content/${currentSlug}.md?raw`);
+        setMarkdown(module.default);
+      } catch (error) {
+        console.error("Erro ao carregar markdown:", error);
         setMarkdown(
-          "# Documento não encontrado\n\nEste documento está em desenvolvimento."
-        )
-      );
+          "# Documento não encontrado\\n\\nEste documento está em desenvolvimento."
+        );
+      }
+    };
+
+    loadMarkdown();
   }, [currentSlug]);
 
   return (
@@ -118,31 +125,31 @@ export default function DocsPage() {
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
                 components={{
-                  h1: ({ node, ...props }) => (
+                  h1: ({ ...props }) => (
                     <h1
                       className="text-4xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-500"
                       {...props}
                     />
                   ),
-                  h2: ({ node, ...props }) => (
+                  h2: ({ ...props }) => (
                     <h2
                       className="text-3xl font-bold mt-12 mb-4 text-indigo-300"
                       {...props}
                     />
                   ),
-                  h3: ({ node, ...props }) => (
+                  h3: ({ ...props }) => (
                     <h3
                       className="text-2xl font-bold mt-8 mb-3 text-indigo-300"
                       {...props}
                     />
                   ),
-                  p: ({ node, ...props }) => (
+                  p: ({ ...props }) => (
                     <p
                       className="text-slate-300 leading-relaxed mb-4"
                       {...props}
                     />
                   ),
-                  code: ({ node, inline, className, children, ...props }) => {
+                  code: ({ inline, className, children, ...props }) => {
                     if (inline) {
                       return (
                         <code
@@ -159,37 +166,37 @@ export default function DocsPage() {
                       </code>
                     );
                   },
-                  pre: ({ node, ...props }) => (
+                  pre: ({ ...props }) => (
                     <pre
                       className="bg-slate-900 border border-slate-800 rounded-xl p-4 overflow-x-auto my-6"
                       {...props}
                     />
                   ),
-                  a: ({ node, ...props }) => (
+                  a: ({ ...props }) => (
                     <a
                       className="text-indigo-400 hover:text-indigo-300 underline"
                       {...props}
                     />
                   ),
-                  ul: ({ node, ...props }) => (
+                  ul: ({ ...props }) => (
                     <ul
                       className="list-disc list-inside space-y-2 text-slate-300 mb-4"
                       {...props}
                     />
                   ),
-                  ol: ({ node, ...props }) => (
+                  ol: ({ ...props }) => (
                     <ol
                       className="list-decimal list-inside space-y-2 text-slate-300 mb-4"
                       {...props}
                     />
                   ),
-                  blockquote: ({ node, ...props }) => (
+                  blockquote: ({ ...props }) => (
                     <blockquote
                       className="border-l-4 border-indigo-500 pl-4 italic text-slate-400 my-4"
                       {...props}
                     />
                   ),
-                  table: ({ node, ...props }) => (
+                  table: ({ ...props }) => (
                     <div className="overflow-x-auto my-6">
                       <table
                         className="min-w-full border border-slate-700 rounded-lg"
@@ -197,13 +204,13 @@ export default function DocsPage() {
                       />
                     </div>
                   ),
-                  th: ({ node, ...props }) => (
+                  th: ({ ...props }) => (
                     <th
                       className="bg-slate-800 border border-slate-700 px-4 py-2 text-left font-semibold"
                       {...props}
                     />
                   ),
-                  td: ({ node, ...props }) => (
+                  td: ({ ...props }) => (
                     <td
                       className="border border-slate-700 px-4 py-2"
                       {...props}
