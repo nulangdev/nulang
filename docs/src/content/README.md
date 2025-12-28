@@ -107,25 +107,37 @@ Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Nod
 ### Instalação
 
 ```bash
-go build -o nulang ./cmd/nulang
+curl -fsSL https://raw.githubusercontent.com/nulangdev/nulang/main/install.sh | bash
+```
+
+### Iniciar novo projeto
+
+```bash
+nulang init
 ```
 
 ### Executar Script
 
 ```bash
-./nulang script.nu
+nulang script.nu
+```
+
+### Instalar dependências
+
+```bash
+nulang install
 ```
 
 ### Modo Watch
 
 ```bash
-./nulang script.nu --watch
+nulang script.nu --watch
 ```
 
 ### REPL
 
 ```bash
-./nulang
+nulang
 ```
 
 ---
