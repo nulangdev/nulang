@@ -350,7 +350,7 @@ export default function LandingPage() {
 
               <div className="mt-8 pt-6 border-t border-slate-800">
                 <p className="text-xs text-slate-500 text-center">
-                  Benchmark: Servidor HTTP simples com JSON response • Apple M1
+                  Benchmark: Servidor HTTP simples com JSON response • Apple M4
                   Pro • 10 conexões simultâneas • wrk -t12 -c400 -d30s
                 </p>
               </div>

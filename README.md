@@ -11,6 +11,7 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 ## Funcionalidades
 
 ### Linguagem
+
 - Sintaxe JavaScript/Node.js com `let`, `const`, `var`, funções tradicionais e **arrow functions**.
 - Controle de fluxo: `if/else`, `for`, `while`, `break`, `continue` e operador ternário.
 - Tratamento de erros: `try/catch/finally` e `throw` com objeto **Error**.
@@ -20,12 +21,14 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 - **RegExp**, **Date**, **Map/Set/WeakMap/WeakSet** com API completa.
 
 ### Runtime e objetos globais
+
 - Objetos globais: `console`, `Math`, `JSON`, `Array`, `Object`, `Buffer`, `Promise`, `Reflect`, `Proxy`.
 - Variáveis especiais: `__filename`, `__dirname` e **process** (argv, env, cwd, exit, stdin/stdout/stderr básicos).
 - **Promises realmente assíncronas** com `resolve`, `reject`, `all`, `race`, `then`, `catch`, `finally`.
 - Event loop completo com **Timers** (`setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`, `sleep`) e integração com Promises.
 
 ### Biblioteca padrão
+
 - **Módulos de núcleo** (via `require` ou `import`):
   - `fs` e `path` – leitura/escrita de arquivos, diretórios, stat, paths, workdir.
   - `crypto` – `createHash`, `createHmac`, `randomBytes`, `randomUUID` e utilitários.
@@ -48,11 +51,13 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 - **HTTP/HTTPS** com suporte a headers, métodos, corpo de resposta e fetch-like API.
 
 ### Sistema de módulos
+
 - Suporte a **CommonJS** (`require`, `exports`, `module.exports`) e **ES Modules** (`import/export`).
 - Resolução de caminhos relativa e absoluta, com cache de módulos carregados.
 - Variáveis de contexto por módulo: `__filename`, `__dirname`, `module`, `exports`, `require`.
 
 ### Ferramentas de desenvolvimento
+
 - **REPL interativo** com ajuda integrada.
 - **Watch mode** (`go run watch.go <arquivo.nu>`) recompila e reexecuta automaticamente.
 - Exemplos em `examples/` cobrindo sintaxe básica, módulos, ES6 e novos recursos.
@@ -60,15 +65,7 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 ## Instalação
 
 ```bash
-# Clone o repositório
-git clone https://github.com/nulangdev/nulang.git
-cd nulang
-
-# Compile
-go build -o nulang .
-
-# (Opcional) instale no GOPATH/bin
-go install
+  curl -fsSL https://raw.githubusercontent.com/nulangdev/nulang/main/install.sh | bash
 ```
 
 ## Uso
@@ -77,13 +74,13 @@ go install
 
 ```bash
 # Criar um novo projeto (gera nulang.yml)
-./nulang init
+nulang init
 
 # Instalar dependências listadas em nulang.yml e gerar/atualizar nulang.lock
-./nulang install
+nulang install
 
 # Rodar um arquivo normalmente
-./nulang caminho/para/arquivo.nu
+nulang caminho/para/arquivo.nu
 ```
 
 - **nulang.yml**: manifest YAML com `name`, `version`, `main` e `dependencies`.
@@ -93,13 +90,13 @@ go install
 ### Executar arquivo
 
 ```bash
-./nulang arquivo.nu
+nulang arquivo.nu
 ```
 
 ### REPL interativo
 
 ```bash
-./nulang
+nulang
 ```
 
 ```text
@@ -115,7 +112,7 @@ nulang> exit
 ### Watch mode
 
 ```bash
-go run watch.go examples/example.nu
+nulang index.nu --watch
 ```
 
 ### Estrutura de pacote
@@ -146,8 +143,8 @@ meu-projeto/
 
 ```javascript
 // index.nu
-import math from "math-tools";          // resolvido a partir de .nu_modules
-import { request } from "http-utils";  // usa fetch e event loop completo
+import math from "math-tools"; // resolvido a partir de .nu_modules
+import { request } from "http-utils"; // usa fetch e event loop completo
 
 async function main() {
   const doubled = math.times(21, 2);
