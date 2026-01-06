@@ -12,7 +12,7 @@ echo -e "${BLUE}"
 cat << "EOF"
 ╔═══════════════════════════════════════╗
 ║                                       ║
-║         NULANG INSTALLER              ║
+║            NU INSTALLER               ║
 ║                                       ║
 ╚═══════════════════════════════════════╝
 EOF
@@ -40,13 +40,13 @@ echo -e "${BLUE}➜ Sistema detectado: ${GREEN}${OS}-${ARCH}${NC}"
 # Verificar se está no macOS
 if [[ "$OS" != "darwin" && "$OS" != "linux" ]]; then
     echo -e "${RED}✗ Sistema operacional não suportado: $OS${NC}"
-    echo -e "${YELLOW}⚠ Nulang suporta apenas macOS e Linux${NC}"
+    echo -e "${YELLOW}⚠ Nu suporta apenas macOS e Linux${NC}"
     exit 1
 fi
 
 # Diretório de instalação
 INSTALL_DIR="/usr/local/bin"
-NULANG_BIN="$INSTALL_DIR/nulang"
+NU_BIN="$INSTALL_DIR/nu"
 
 # URL do binário
 GITHUB_REPO="nulangdev/nulang"
@@ -62,12 +62,12 @@ if [ -z "$VERSION" ]; then
 fi
 
 echo -e "${GREEN}➜ Versão encontrada: ${VERSION}${NC}"
-BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/nulang-${OS}-${ARCH}"
+BINARY_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/nu-${OS}-${ARCH}"
 
 
 # Verificar se já está instalado
-if [ -f "$NULANG_BIN" ]; then
-    echo -e "${YELLOW}⚠ Nulang já está instalado em $NULANG_BIN${NC}"
+if [ -f "$NU_BIN" ]; then
+    echo -e "${YELLOW}⚠ Nu já está instalado em $NU_BIN${NC}"
     read -p "Deseja reinstalar? (s/N): " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[SsYy]$ ]]; then
@@ -76,11 +76,11 @@ if [ -f "$NULANG_BIN" ]; then
     fi
 fi
 
-echo -e "${BLUE}➜ Baixando Nulang...${NC}"
+echo -e "${BLUE}➜ Baixando Nu...${NC}"
 
 # Criar diretório temporário
 TMP_DIR=$(mktemp -d)
-TMP_BIN="$TMP_DIR/nulang"
+TMP_BIN="$TMP_DIR/nu"
 
 # Baixar binário
 if command -v curl &> /dev/null; then
@@ -103,25 +103,25 @@ fi
 chmod +x "$TMP_BIN"
 
 # Instalar (pode precisar de sudo)
-echo -e "${BLUE}➜ Instalando Nulang em $INSTALL_DIR...${NC}"
+echo -e "${BLUE}➜ Instalando Nu em $INSTALL_DIR...${NC}"
 
 if [ -w "$INSTALL_DIR" ]; then
-    mv "$TMP_BIN" "$NULANG_BIN"
+    mv "$TMP_BIN" "$NU_BIN"
 else
     echo -e "${YELLOW}⚠ Permissões de administrador necessárias${NC}"
-    sudo mv "$TMP_BIN" "$NULANG_BIN"
+    sudo mv "$TMP_BIN" "$NU_BIN"
 fi
 
 # Limpar arquivos temporários
 rm -rf "$TMP_DIR"
 
 # Verificar instalação
-if [ ! -f "$NULANG_BIN" ]; then
+if [ ! -f "$NU_BIN" ]; then
     echo -e "${RED}✗ Falha na instalação${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Nulang instalado com sucesso!${NC}"
+echo -e "${GREEN}✓ Nu instalado com sucesso!${NC}"
 
 # Configurar shell (zsh)
 configure_shell() {
@@ -137,38 +137,27 @@ configure_shell() {
     echo -e "${BLUE}➜ Configurando shell ($SHELL_RC)...${NC}"
     
     # Verificar se já existe configuração
-    if grep -q "# Nulang configuration" "$SHELL_RC" 2>/dev/null; then
-        echo -e "${YELLOW}⚠ Configuração do Nulang já existe em $SHELL_RC${NC}"
+    if grep -q "# Nu configuration" "$SHELL_RC" 2>/dev/null; then
+        echo -e "${YELLOW}⚠ Configuração do Nu já existe em $SHELL_RC${NC}"
         return
     fi
     
     # Adicionar configuração ao shell
     cat >> "$SHELL_RC" << 'EOF'
 
-# Nulang configuration
+# Nu configuration
 export PATH="$PATH:/usr/local/bin"
 
-# Alias para executar arquivos .nu diretamente
-alias nu='nulang'
-
-# Função para executar scripts Nulang
-run_nu() {
-    if [ -f "$1" ]; then
-        nulang "$1"
-    else
-        echo "Arquivo não encontrado: $1"
-    fi
-}
-
-# Autocompletar para arquivos .nu
+# Autocompletar para arquivos .js e .ts
 if [ -n "$ZSH_VERSION" ]; then
     # Zsh completion
-    _nulang_completion() {
-        local -a nu_files
-        nu_files=(*.nu)
-        _describe 'nulang files' nu_files
+    _nu_completion() {
+        local -a js_files ts_files
+        js_files=(*.js)
+        ts_files=(*.ts)
+        _describe 'nu files' js_files ts_files
     }
-    compdef _nulang_completion nulang nu run_nu
+    compdef _nu_completion nu
 fi
 EOF
     
@@ -184,26 +173,25 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
     configure_shell
 fi
 
-# Exibir informações da versão
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║${NC}  ${GREEN}Instalação concluída!${NC}              ${BLUE}║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${GREEN}➜ Versão instalada:${NC}"
-"$NULANG_BIN" --version 2>/dev/null || echo "  Nulang (development build)"
+"$NU_BIN" --version 2>/dev/null || echo "  Nu (development build)"
 echo ""
 echo -e "${GREEN}➜ Comandos disponíveis:${NC}"
-echo -e "  ${BLUE}nulang${NC} <arquivo.nu>  - Executar arquivo Nulang"
-echo -e "  ${BLUE}nu${NC} <arquivo.nu>      - Alias para nulang"
-echo -e "  ${BLUE}run_nu${NC} <arquivo.nu>  - Função helper"
+echo -e "  ${BLUE}nu${NC} <arquivo.js>  - Executar arquivo JavaScript"
+echo -e "  ${BLUE}nu${NC} <arquivo.ts>  - Executar arquivo TypeScript"
+echo -e "  ${BLUE}nu${NC}              - REPL interativo"
 echo ""
 echo -e "${GREEN}➜ Exemplo de uso:${NC}"
-echo -e "  ${BLUE}nulang index.nu${NC}"
-echo -e "  ${BLUE}nu index.nu${NC}"
+echo -e "  ${BLUE}nu index.js${NC}"
+echo -e "  ${BLUE}nu app.ts${NC}"
 echo ""
 echo -e "${YELLOW}➜ Para desinstalar:${NC}"
 echo -e "  ${BLUE}curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPO}/main/uninstall.sh | bash${NC}"
 echo ""
-echo -e "${GREEN}Obrigado por usar Nulang! 🚀${NC}"
+echo -e "${GREEN}Obrigado por usar Nu! 🚀${NC}"
 echo ""

@@ -75,7 +75,7 @@ func RunWithWatchV2(filename string) {
 // printWatchHeader prints the initial watch mode header
 func printWatchHeader(filename string) {
 	fmt.Println("\033[38;5;39m┌──────────────────────────────────────────────────┐\033[0m")
-	fmt.Println("\033[38;5;39m│\033[0m  \033[1;36m👁  Nulang Watch Mode\033[0m                            \033[38;5;39m│\033[0m")
+	fmt.Println("\033[38;5;39m│\033[0m  \033[1;36m👁  Nu Watch Mode\033[0m                                \033[38;5;39m│\033[0m")
 	fmt.Println("\033[38;5;39m├──────────────────────────────────────────────────┤\033[0m")
 	fmt.Printf("\033[38;5;39m│\033[0m  📄 Main:  \033[1;33m%-36s\033[0m \033[38;5;39m│\033[0m\n", filepath.Base(filename))
 	fmt.Println("\033[38;5;39m│\033[0m  \033[90mPress Ctrl+C to stop\033[0m                            \033[38;5;39m│\033[0m")
@@ -272,21 +272,32 @@ func (ctx *WatchContext) discoverDepsRecursive(content string, basePath string, 
 			if strings.HasPrefix(modulePath, ".") || strings.HasPrefix(modulePath, "/") {
 				resolvedPath = filepath.Join(baseDir, modulePath)
 				
-				// Try with .nu extension if not present
+				// Try with extensions if not present (order: .ts -> .js)
 				if filepath.Ext(resolvedPath) == "" {
-					if _, err := os.Stat(resolvedPath + ".nu"); err == nil {
-						resolvedPath = resolvedPath + ".nu"
-					} else if _, err := os.Stat(filepath.Join(resolvedPath, "index.nu")); err == nil {
-						resolvedPath = filepath.Join(resolvedPath, "index.nu")
+					if _, err := os.Stat(resolvedPath + ".ts"); err == nil {
+						resolvedPath = resolvedPath + ".ts"
+					} else if _, err := os.Stat(resolvedPath + ".js"); err == nil {
+						resolvedPath = resolvedPath + ".js"
+					} else if _, err := os.Stat(filepath.Join(resolvedPath, "index.ts")); err == nil {
+						resolvedPath = filepath.Join(resolvedPath, "index.ts")
+					} else if _, err := os.Stat(filepath.Join(resolvedPath, "index.js")); err == nil {
+						resolvedPath = filepath.Join(resolvedPath, "index.js")
 					}
 				}
 			} else {
-				// Check .nu_modules
-				nuModulesPath := evaluator.FindNuModulesPath(basePath)
-				if nuModulesPath != "" {
-					pkgPath := filepath.Join(nuModulesPath, modulePath, "index.nu")
-					if _, err := os.Stat(pkgPath); err == nil {
-						resolvedPath = pkgPath
+				// Check node_modules
+				nodeModulesPath := evaluator.FindNodeModulesPath(basePath)
+				if nodeModulesPath != "" {
+					// Try index.ts first
+					pkgTsPath := filepath.Join(nodeModulesPath, modulePath, "index.ts")
+					if _, err := os.Stat(pkgTsPath); err == nil {
+						resolvedPath = pkgTsPath
+					} else {
+						// Try index.js
+						pkgJsPath := filepath.Join(nodeModulesPath, modulePath, "index.js")
+						if _, err := os.Stat(pkgJsPath); err == nil {
+							resolvedPath = pkgJsPath
+						}
 					}
 				}
 			}

@@ -52,7 +52,7 @@ func LoadPackageConfig(path string) (*PackageConfig, error) {
 
 	// Set defaults
 	if config.Main == "" {
-		config.Main = "index.nu"
+		config.Main = "index.js"
 	}
 
 	return &config, nil
@@ -121,7 +121,7 @@ func (lf *LockFile) UpdateOrAddEntry(entry LockEntry) {
 func InstallDependencies(projectPath string) error {
 	configPath := filepath.Join(projectPath, "nulang.yml")
 	lockPath := filepath.Join(projectPath, "nulang.lock")
-	modulesPath := filepath.Join(projectPath, ".nu_modules")
+	modulesPath := filepath.Join(projectPath, "node_modules")
 
 	// Load package config
 	config, err := LoadPackageConfig(configPath)
@@ -135,9 +135,9 @@ func InstallDependencies(projectPath string) error {
 		return err
 	}
 
-	// Create .nu_modules directory
+	// Create node_modules directory
 	if err := os.MkdirAll(modulesPath, 0755); err != nil {
-		return fmt.Errorf("failed to create .nu_modules directory: %w", err)
+		return fmt.Errorf("failed to create node_modules directory: %w", err)
 	}
 
 	// Install each dependency
@@ -196,7 +196,7 @@ func DownloadFromGitHub(url, destPath string) (commit string, checksum string, e
 	}
 
 	// First, download nulang.yml to find the main file
-	mainFile := "index.nu" // default fallback
+	mainFile := "index.js" // default fallback
 	configURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main/nulang.yml", user, repo)
 	
 	configResp, err := http.Get(configURL)
@@ -242,10 +242,12 @@ func DownloadFromGitHub(url, destPath string) (commit string, checksum string, e
 		return "", "", fmt.Errorf("failed to write %s: %w", mainFile, err)
 	}
 
-	// If main file is not index.nu, create index.nu that re-exports it
-	if mainFile != "index.nu" {
-		indexContent := fmt.Sprintf("// Auto-generated index that re-exports main file\nexport * from \"./%s\"\n", strings.TrimSuffix(mainFile, ".nu"))
-		indexPath := filepath.Join(destPath, "index.nu")
+	// If main file is not index.js/index.ts, create index.js that re-exports it
+	if mainFile != "index.js" && mainFile != "index.ts" {
+		ext := filepath.Ext(mainFile)
+		baseName := strings.TrimSuffix(mainFile, ext)
+		indexContent := fmt.Sprintf("// Auto-generated index that re-exports main file\nexport * from \"./%s\"\n", baseName)
+		indexPath := filepath.Join(destPath, "index.js")
 		os.WriteFile(indexPath, []byte(indexContent), 0644)
 	}
 
@@ -324,7 +326,7 @@ func InitProject(projectPath string) error {
 	config := PackageConfig{
 		Name:         name,
 		Version:      "1.0.0",
-		Main:         "index.nu",
+		Main:         "index.js",
 		Dependencies: make(map[string]string),
 	}
 
@@ -336,15 +338,15 @@ func InitProject(projectPath string) error {
 	return nil
 }
 
-// FindNuModulesPath finds the .nu_modules directory by traversing up
-func FindNuModulesPath(startPath string) string {
+// FindNodeModulesPath finds the node_modules directory by traversing up
+func FindNodeModulesPath(startPath string) string {
 	dir := startPath
 	if !isDirectory(dir) {
 		dir = filepath.Dir(dir)
 	}
 
 	for {
-		modulesPath := filepath.Join(dir, ".nu_modules")
+		modulesPath := filepath.Join(dir, "node_modules")
 		if info, err := os.Stat(modulesPath); err == nil && info.IsDir() {
 			return modulesPath
 		}

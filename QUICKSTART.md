@@ -1,4 +1,4 @@
-# 🎯 Quick Start - Instalação e Uso do Nulang
+# 🎯 Quick Start - Instalação e Uso do Nu
 
 ## ⚡ Instalação Rápida (1 comando)
 
@@ -25,12 +25,10 @@ Então use:
 
 ```bash
 # Criar arquivo de teste
-echo 'console.log("Hello, Nulang! 🚀");' > test.nu
+echo 'console.log("Hello, Nu! 🚀");' > test.js
 
-# Executar - 3 formas diferentes
-nulang test.nu   # Forma padrão
-nu test.nu       # Usando alias
-run_nu test.nu   # Usando função helper
+# Executar
+nu test.js
 ```
 
 ## 📦 Exemplos Práticos
@@ -38,23 +36,23 @@ run_nu test.nu   # Usando função helper
 ### 1. Hello World
 
 ```javascript
-// hello.nu
+// hello.js
 console.log("Hello, World!");
 ```
 
 ```bash
-nu hello.nu
+nu hello.js
 ```
 
 ### 2. Servidor HTTP Simples
 
 ```javascript
-// server.nu
+// server.js
 const http = require("http");
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("Hello from Nulang! 🚀\n");
+  res.end("Hello from Nu! 🚀\n");
 });
 
 server.listen(3000, () => {
@@ -63,17 +61,17 @@ server.listen(3000, () => {
 ```
 
 ```bash
-nu server.nu
+nu server.js
 ```
 
 ### 3. Manipulação de Arquivos
 
 ```javascript
-// files.nu
+// files.js
 const fs = require("fs");
 
 // Escrever
-fs.writeFileSync("data.txt", "Nulang é incrível!");
+fs.writeFileSync("data.txt", "Nu é incrível!");
 
 // Ler
 const content = fs.readFileSync("data.txt", "utf8");
@@ -85,13 +83,13 @@ console.log("Arquivos:", files);
 ```
 
 ```bash
-nu files.nu
+nu files.js
 ```
 
 ### 4. Fetch API
 
 ```javascript
-// fetch.nu
+// fetch.js
 const response = fetch("https://api.github.com/users/nulangdev");
 const data = response.json();
 console.log("GitHub User:", data.name);
@@ -99,20 +97,20 @@ console.log("Repos:", data.public_repos);
 ```
 
 ```bash
-nu fetch.nu
+nu fetch.js
 ```
 
 ## 🛠️ Comandos Úteis
 
 ```bash
 # Verificar instalação
-which nulang
+which nu
 
 # Executar arquivo
-nulang script.nu
+nu script.js
 
 # REPL interativo
-nulang
+nu
 
 # Desinstalar
 curl -fsSL https://raw.githubusercontent.com/nulangdev/nulang/main/uninstall.sh | bash
@@ -126,7 +124,7 @@ curl -fsSL https://raw.githubusercontent.com/nulangdev/nulang/main/uninstall.sh 
 
 ## ❓ Problemas?
 
-### "Command not found: nulang"
+### "Command not found: nu"
 
 ```bash
 # Verifique o PATH
@@ -140,7 +138,7 @@ source ~/.zshrc
 ### Permission denied
 
 ```bash
-chmod +x /usr/local/bin/nulang
+chmod +x /usr/local/bin/nu
 ```
 
 ### Reinstalar

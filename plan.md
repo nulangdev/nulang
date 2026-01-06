@@ -2,7 +2,7 @@ Nulang é nossa linguagem de programação escrita em Golang com a sintaxe do Ja
 Devemos criar um interpretador para que possamos executar o código.
 
 Execução:
-`$ nulang index.nu`
+`$ nu index.js`
 
 #### Tipos primitivos:
 

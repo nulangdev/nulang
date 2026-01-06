@@ -12,22 +12,22 @@ echo -e "${BLUE}"
 cat << "EOF"
 ╔═══════════════════════════════════════╗
 ║                                       ║
-║       NULANG UNINSTALLER              ║
+║          NU UNINSTALLER               ║
 ║                                       ║
 ╚═══════════════════════════════════════╝
 EOF
 echo -e "${NC}"
 
 INSTALL_DIR="/usr/local/bin"
-NULANG_BIN="$INSTALL_DIR/nulang"
+NU_BIN="$INSTALL_DIR/nu"
 
-# Verificar se Nulang está instalado
-if [ ! -f "$NULANG_BIN" ]; then
-    echo -e "${RED}✗ Nulang não está instalado em $NULANG_BIN${NC}"
+# Verificar se Nu está instalado
+if [ ! -f "$NU_BIN" ]; then
+    echo -e "${RED}✗ Nu não está instalado em $NU_BIN${NC}"
     exit 1
 fi
 
-echo -e "${YELLOW}⚠ Isso irá remover o Nulang do seu sistema${NC}"
+echo -e "${YELLOW}⚠ Isso irá remover o Nu do seu sistema${NC}"
 read -p "Tem certeza que deseja continuar? (s/N): " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[SsYy]$ ]]; then
@@ -38,13 +38,13 @@ fi
 # Remover binário
 echo -e "${BLUE}➜ Removendo binário...${NC}"
 if [ -w "$INSTALL_DIR" ]; then
-    rm -f "$NULANG_BIN"
+    rm -f "$NU_BIN"
 else
-    sudo rm -f "$NULANG_BIN"
+    sudo rm -f "$NU_BIN"
 fi
 
 # Verificar remoção
-if [ -f "$NULANG_BIN" ]; then
+if [ -f "$NU_BIN" ]; then
     echo -e "${RED}✗ Falha ao remover o binário${NC}"
     exit 1
 fi
@@ -71,9 +71,9 @@ remove_shell_config() {
     # Criar backup
     cp "$SHELL_RC" "${SHELL_RC}.backup"
     
-    # Remover configuração do Nulang
-    sed -i.tmp '/# Nulang configuration/,/^$/d' "$SHELL_RC" 2>/dev/null || \
-    sed -i '.tmp' '/# Nulang configuration/,/^$/d' "$SHELL_RC"
+    # Remover configuração do Nu
+    sed -i.tmp '/# Nu configuration/,/^$/d' "$SHELL_RC" 2>/dev/null || \
+    sed -i '.tmp' '/# Nu configuration/,/^$/d' "$SHELL_RC"
     
     rm -f "${SHELL_RC}.tmp"
     
@@ -89,7 +89,7 @@ if [[ ! $REPLY =~ ^[Nn]$ ]]; then
 fi
 
 echo ""
-echo -e "${GREEN}✓ Nulang foi desinstalado com sucesso!${NC}"
+echo -e "${GREEN}✓ Nu foi desinstalado com sucesso!${NC}"
 echo ""
 echo -e "${YELLOW}ℹ Para reinstalar, execute:${NC}"
 echo -e "  ${BLUE}curl -fsSL https://raw.githubusercontent.com/nulangdev/nulang/main/install.sh | bash${NC}"

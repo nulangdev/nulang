@@ -4,7 +4,7 @@
 .PHONY: build install uninstall clean release help test
 
 # Variáveis
-BINARY_NAME=nulang
+BINARY_NAME=nu
 VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 LDFLAGS=-ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
@@ -22,7 +22,7 @@ NC=\033[0m
 
 # Ajuda
 help:
-	@echo "$(BLUE)Nulang - Makefile$(NC)"
+	@echo "$(BLUE)Nu - Makefile$(NC)"
 	@echo ""
 	@echo "$(GREEN)Comandos disponíveis:$(NC)"
 	@echo "  $(YELLOW)make build$(NC)         - Compilar o binário"
@@ -36,7 +36,7 @@ help:
 
 # Build local
 build:
-	@echo "$(BLUE)➜ Compilando Nulang...$(NC)"
+	@echo "$(BLUE)➜ Compilando Nu...$(NC)"
 	@go build $(LDFLAGS) -o $(BINARY_NAME) .
 	@echo "$(GREEN)✓ Build concluído: ./$(BINARY_NAME)$(NC)"
 
@@ -48,18 +48,18 @@ install: build
 	else \
 		sudo cp $(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME); \
 	fi
-	@echo "$(GREEN)✓ Nulang instalado com sucesso!$(NC)"
+	@echo "$(GREEN)✓ Nu instalado com sucesso!$(NC)"
 	@echo "$(YELLOW)ℹ Execute './install.sh' para configurar o shell$(NC)"
 
 # Desinstalar
 uninstall:
-	@echo "$(BLUE)➜ Desinstalando Nulang...$(NC)"
+	@echo "$(BLUE)➜ Desinstalando Nu...$(NC)"
 	@if [ -w "$(INSTALL_DIR)" ]; then \
 		rm -f $(INSTALL_DIR)/$(BINARY_NAME); \
 	else \
 		sudo rm -f $(INSTALL_DIR)/$(BINARY_NAME); \
 	fi
-	@echo "$(GREEN)✓ Nulang desinstalado!$(NC)"
+	@echo "$(GREEN)✓ Nu desinstalado!$(NC)"
 
 # Limpar arquivos de build
 clean:
@@ -129,4 +129,4 @@ update-deps:
 # Executar um arquivo de exemplo
 run-example:
 	@echo "$(BLUE)➜ Executando exemplo...$(NC)"
-	@./$(BINARY_NAME) examples/index.nu
+	@./$(BINARY_NAME) examples/index.js

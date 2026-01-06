@@ -5,7 +5,7 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 ## Visão geral
 
 - **Pipeline completo**: Lexer ➜ Parser (Pratt) ➜ AST ➜ Evaluator ➜ Event Loop completo.
-- **Execução flexível**: rode arquivos `.nu`, use o REPL interativo ou o modo watch para desenvolvimento.
+- **Execução flexível**: rode arquivos `.js` ou `.ts`, use o REPL interativo ou o modo watch para desenvolvimento.
 - **Compatível com JS**: sintaxe, tipos e APIs modeladas no ecossistema Node.js sempre que possível.
 
 ## Funcionalidades
@@ -74,45 +74,45 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 
 ```bash
 # Criar um novo projeto (gera nulang.yml)
-nulang init
+nu init
 
 # Instalar dependências listadas em nulang.yml e gerar/atualizar nulang.lock
-nulang install
+nu install
 
 # Rodar um arquivo normalmente
-nulang caminho/para/arquivo.nu
+nu caminho/para/arquivo.js
 ```
 
 - **nulang.yml**: manifest YAML com `name`, `version`, `main` e `dependencies`.
 - **nulang.lock**: lockfile gerado automaticamente contendo URL, commit e checksum de cada dependência instalada.
-- **.nu_modules/**: diretório onde os pacotes baixados são armazenados (semelhante ao `node_modules`).
+- **node_modules/**: diretório onde os pacotes baixados são armazenados (semelhante ao `node_modules` do Node.js).
 
 ### Executar arquivo
 
 ```bash
-nulang arquivo.nu
+nu arquivo.js
 ```
 
 ### REPL interativo
 
 ```bash
-nulang
+nu
 ```
 
 ```text
-Nulang v0.1.0 - JavaScript-like language written in Go
+Nu v0.1.0 - JavaScript-like language written in Go
 Type 'exit' to quit, 'help' for more info
 
-nulang> let x = 5
-nulang> console.log(x * 2)
+nu> let x = 5
+nu> console.log(x * 2)
 10
-nulang> exit
+nu> exit
 ```
 
 ### Watch mode
 
 ```bash
-nulang index.nu --watch
+nu index.js --watch
 ```
 
 ### Estrutura de pacote
@@ -121,7 +121,7 @@ nulang index.nu --watch
 # nulang.yml
 name: meu-projeto
 version: 1.0.0
-main: index.nu
+main: index.js
 dependencies:
   math-tools: https://github.com/exemplo/math-tools
   http-utils: https://github.com/exemplo/http-utils
@@ -129,21 +129,21 @@ dependencies:
 
 ```text
 meu-projeto/
-├── nulang.yml          # manifest (criado por ./nulang init)
-├── nulang.lock         # lockfile (criado/atualizado por ./nulang install)
-├── .nu_modules/        # pacotes instalados
+├── nulang.yml          # manifest (criado por nu init)
+├── nulang.lock         # lockfile (criado/atualizado por nu install)
+├── node_modules/       # pacotes instalados
 │   └── math-tools/
-│       └── index.nu
-├── index.nu
+│       └── index.js
+├── index.js
 └── lib/
-    └── api.nu
+    └── api.js
 ```
 
 ### Exemplos de uso real com pacotes
 
 ```javascript
-// index.nu
-import math from "math-tools"; // resolvido a partir de .nu_modules
+// index.js
+import math from "math-tools"; // resolvido a partir de node_modules
 import { request } from "http-utils"; // usa fetch e event loop completo
 
 async function main() {
@@ -188,12 +188,12 @@ console.log(numeros.reduce((acc, n) => acc + n, 0));
 ### Módulos CommonJS
 
 ```javascript
-// math_utils.nu
+// math_utils.js
 exports.add = (a, b) => a + b;
 exports.PI = 3.14159;
 
-// main.nu
-let math = require("./math_utils.nu");
+// main.js
+let math = require("./math_utils.js");
 console.log(math.add(5, 3));
 console.log(math.PI);
 ```

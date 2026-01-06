@@ -1,5 +1,9 @@
 # Binários
+nu
 nulang
+
+# Módulos
+node_modules/
 
 # Releases
 releases/

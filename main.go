@@ -41,7 +41,7 @@ func main() {
 		case "init":
 			handleInit()
 		case "version", "-v", "--version":
-			fmt.Printf("Nulang v%s\n", VERSION)
+			fmt.Printf("Nu v%s\n", VERSION)
 		case "help", "-h", "--help":
 			printCLIHelp()
 		}
@@ -101,11 +101,11 @@ func handleInit() {
 }
 
 func printCLIHelp() {
-	fmt.Printf("Nulang v%s - JavaScript-like language written in Go\n\n", VERSION)
+	fmt.Printf("Nu v%s - JavaScript-like language written in Go\n\n", VERSION)
 	fmt.Println("Usage:")
-	fmt.Println("  nulang <file.nu>           Run a Nulang script")
-	fmt.Println("  nulang <file.nu> --watch   Run with hot reload on changes")
-	fmt.Println("  nulang                     Start the REPL")
+	fmt.Println("  nu <file.js>           Run a script (.js or .ts)")
+	fmt.Println("  nu <file.ts> --watch   Run with hot reload on changes")
+	fmt.Println("  nu                     Start the REPL")
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  install              Install dependencies from nulang.yml")
@@ -160,7 +160,7 @@ func runFile(filename string) {
 }
 
 func startREPL() {
-	fmt.Printf("Nulang v%s\n", VERSION)
+	fmt.Printf("Nu v%s\n", VERSION)
 	fmt.Println("Type 'exit' to quit, 'help' for more info")
 	fmt.Println()
 
@@ -169,7 +169,7 @@ func startREPL() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
-		fmt.Print("nulang> ")
+		fmt.Print("nu> ")
 		if !scanner.Scan() {
 			break
 		}
@@ -218,12 +218,12 @@ func printParserErrors(out io.Writer, errors []string) {
 }
 
 func printHelp() {
-	fmt.Println("Nulang Help:")
+	fmt.Println("Nu Help:")
 	fmt.Println("  - Syntax is similar to JavaScript/Node.js")
 	fmt.Println("  - Supports: let, const, var, function, arrow functions")
 	fmt.Println("  - Control flow: if/else, for, while, try/catch")
 	fmt.Println("  - Built-ins: console.log, Math, JSON, Array, Object")
-	fmt.Println("  - Run file: nulang filename.nu")
+	fmt.Println("  - Run file: nu filename.js (or .ts)")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  let x = 5")

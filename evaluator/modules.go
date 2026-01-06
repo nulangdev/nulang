@@ -158,34 +158,57 @@ func resolveModulePath(modulePath string, basePath string) string {
 			baseDir := filepath.Dir(basePath)
 			resolved := filepath.Join(baseDir, modulePath)
 			
-			// Try with .nu extension if not present
+			// Try with extensions if not present (order: no ext -> .ts -> .js)
 			if filepath.Ext(resolved) == "" {
-				if _, err := os.Stat(resolved + ".nu"); err == nil {
-					return resolved + ".nu"
+				// Try exact path first
+				if _, err := os.Stat(resolved); err == nil {
+					return resolved
 				}
-				// Try index.nu in directory
-				indexPath := filepath.Join(resolved, "index.nu")
-				if _, err := os.Stat(indexPath); err == nil {
-					return indexPath
+				// Try .ts extension
+				if _, err := os.Stat(resolved + ".ts"); err == nil {
+					return resolved + ".ts"
+				}
+				// Try .js extension
+				if _, err := os.Stat(resolved + ".js"); err == nil {
+					return resolved + ".js"
+				}
+				// Try index.ts in directory
+				indexTsPath := filepath.Join(resolved, "index.ts")
+				if _, err := os.Stat(indexTsPath); err == nil {
+					return indexTsPath
+				}
+				// Try index.js in directory
+				indexJsPath := filepath.Join(resolved, "index.js")
+				if _, err := os.Stat(indexJsPath); err == nil {
+					return indexJsPath
 				}
 			}
 			return resolved
 		}
 	}
 	
-	// Check .nu_modules directory for package imports
-	nuModulesPath := FindNuModulesPath(basePath)
-	if nuModulesPath != "" {
-		pkgPath := filepath.Join(nuModulesPath, modulePath, "index.nu")
-		if _, err := os.Stat(pkgPath); err == nil {
-			return pkgPath
+	// Check node_modules directory for package imports
+	nodeModulesPath := FindNodeModulesPath(basePath)
+	if nodeModulesPath != "" {
+		// Try index.ts first
+		pkgTsPath := filepath.Join(nodeModulesPath, modulePath, "index.ts")
+		if _, err := os.Stat(pkgTsPath); err == nil {
+			return pkgTsPath
+		}
+		// Try index.js
+		pkgJsPath := filepath.Join(nodeModulesPath, modulePath, "index.js")
+		if _, err := os.Stat(pkgJsPath); err == nil {
+			return pkgJsPath
 		}
 	}
 	
-	// Try current directory
+	// Try current directory with extensions
 	if filepath.Ext(modulePath) == "" {
-		if _, err := os.Stat(modulePath + ".nu"); err == nil {
-			return modulePath + ".nu"
+		if _, err := os.Stat(modulePath + ".ts"); err == nil {
+			return modulePath + ".ts"
+		}
+		if _, err := os.Stat(modulePath + ".js"); err == nil {
+			return modulePath + ".js"
 		}
 	}
 	
