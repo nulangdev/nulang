@@ -162,8 +162,284 @@ func evalArrayProperty(arr *object.Array, prop string) object.Object {
 
 			return &object.Array{Elements: removed}
 		}}
+	case "sort":
+		return &object.Builtin{Name: "sort", Fn: func(args ...object.Object) object.Object {
+			// In-place sort using simple bubble sort
+			// Optional compareFn can be passed
+			n := len(arr.Elements)
+			
+			// If no compare function, use default string comparison
+			if len(args) == 0 {
+				// Default sort: convert to strings and compare
+				for i := 0; i < n-1; i++ {
+					for j := 0; j < n-i-1; j++ {
+						a := objectToString(arr.Elements[j])
+						b := objectToString(arr.Elements[j+1])
+						if a > b {
+							arr.Elements[j], arr.Elements[j+1] = arr.Elements[j+1], arr.Elements[j]
+						}
+					}
+				}
+			} else if fn, ok := args[0].(*object.Function); ok {
+				// Sort with compare function
+				for i := 0; i < n-1; i++ {
+					for j := 0; j < n-i-1; j++ {
+						fnEnv := extendFunctionEnv(fn, []object.Object{arr.Elements[j], arr.Elements[j+1]})
+						result := unwrapReturnValue(Eval(fn.Body, fnEnv))
+						if num, ok := result.(*object.Number); ok {
+							if num.Value > 0 {
+								arr.Elements[j], arr.Elements[j+1] = arr.Elements[j+1], arr.Elements[j]
+							}
+						}
+					}
+				}
+			} else if builtin, ok := args[0].(*object.Builtin); ok {
+				// Sort with builtin compare function
+				for i := 0; i < n-1; i++ {
+					for j := 0; j < n-i-1; j++ {
+						result := builtin.Fn(arr.Elements[j], arr.Elements[j+1])
+						if num, ok := result.(*object.Number); ok {
+							if num.Value > 0 {
+								arr.Elements[j], arr.Elements[j+1] = arr.Elements[j+1], arr.Elements[j]
+							}
+						}
+					}
+				}
+			}
+			return arr
+		}}
+	case "indexOf":
+		return &object.Builtin{Name: "indexOf", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return &object.Number{Value: -1}
+			}
+			searchElement := args[0]
+			fromIndex := 0
+			if len(args) > 1 {
+				if n, ok := args[1].(*object.Number); ok {
+					fromIndex = int(n.Value)
+				}
+			}
+			if fromIndex < 0 {
+				fromIndex = len(arr.Elements) + fromIndex
+				if fromIndex < 0 {
+					fromIndex = 0
+				}
+			}
+
+			for i := fromIndex; i < len(arr.Elements); i++ {
+				if evalStrictEquality(arr.Elements[i], searchElement) == TRUE {
+					return &object.Number{Value: float64(i)}
+				}
+			}
+			return &object.Number{Value: -1}
+		}}
+	case "lastIndexOf":
+		return &object.Builtin{Name: "lastIndexOf", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return &object.Number{Value: -1}
+			}
+			searchElement := args[0]
+			fromIndex := len(arr.Elements) - 1
+			if len(args) > 1 {
+				if n, ok := args[1].(*object.Number); ok {
+					fromIndex = int(n.Value)
+				}
+			}
+			if fromIndex < 0 {
+				fromIndex = len(arr.Elements) + fromIndex
+			}
+			if fromIndex >= len(arr.Elements) {
+				fromIndex = len(arr.Elements) - 1
+			}
+
+			for i := fromIndex; i >= 0; i-- {
+				if evalStrictEquality(arr.Elements[i], searchElement) == TRUE {
+					return &object.Number{Value: float64(i)}
+				}
+			}
+			return &object.Number{Value: -1}
+		}}
+	case "some":
+		return &object.Builtin{Name: "some", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return FALSE
+			}
+			fn, ok := args[0].(*object.Function)
+			if !ok {
+				return newError("some callback must be a function")
+			}
+			var thisArg object.Object
+			if len(args) > 1 {
+				thisArg = args[1]
+			}
+			for i, elem := range arr.Elements {
+				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
+				if isTruthy(unwrapReturnValue(Eval(fn.Body, fnEnv))) {
+					return TRUE
+				}
+			}
+			return FALSE
+		}}
+	case "every":
+		return &object.Builtin{Name: "every", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return TRUE
+			}
+			fn, ok := args[0].(*object.Function)
+			if !ok {
+				return newError("every callback must be a function")
+			}
+			var thisArg object.Object
+			if len(args) > 1 {
+				thisArg = args[1]
+			}
+			for i, elem := range arr.Elements {
+				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
+				if !isTruthy(unwrapReturnValue(Eval(fn.Body, fnEnv))) {
+					return FALSE
+				}
+			}
+			return TRUE
+		}}
+	case "fill":
+		return &object.Builtin{Name: "fill", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return arr
+			}
+			value := args[0]
+			start := 0
+			end := len(arr.Elements)
+			if len(args) > 1 {
+				if n, ok := args[1].(*object.Number); ok {
+					start = int(n.Value)
+					if start < 0 {
+						start = len(arr.Elements) + start
+					}
+				}
+			}
+			if len(args) > 2 {
+				if n, ok := args[2].(*object.Number); ok {
+					end = int(n.Value)
+					if end < 0 {
+						end = len(arr.Elements) + end
+					}
+				}
+			}
+			if start < 0 {
+				start = 0
+			}
+			if end > len(arr.Elements) {
+				end = len(arr.Elements)
+			}
+			for i := start; i < end; i++ {
+				arr.Elements[i] = value
+			}
+			return arr
+		}}
+	case "flat":
+		return &object.Builtin{Name: "flat", Fn: func(args ...object.Object) object.Object {
+			depth := 1
+			if len(args) > 0 {
+				if n, ok := args[0].(*object.Number); ok {
+					depth = int(n.Value)
+				}
+			}
+			result := flattenArray(arr.Elements, depth)
+			return &object.Array{Elements: result}
+		}}
+	case "flatMap":
+		return &object.Builtin{Name: "flatMap", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 1 {
+				return newError("flatMap requires a callback function")
+			}
+			fn, ok := args[0].(*object.Function)
+			if !ok {
+				return newError("flatMap callback must be a function")
+			}
+			var thisArg object.Object
+			if len(args) > 1 {
+				thisArg = args[1]
+			}
+			var result []object.Object
+			for i, elem := range arr.Elements {
+				fnEnv := extendFunctionEnv(fn, []object.Object{elem, &object.Number{Value: float64(i)}, arr})
+				if thisArg != nil {
+					fnEnv.Set("this", thisArg)
+				}
+				mapped := unwrapReturnValue(Eval(fn.Body, fnEnv))
+				if mappedArr, ok := mapped.(*object.Array); ok {
+					result = append(result, mappedArr.Elements...)
+				} else {
+					result = append(result, mapped)
+				}
+			}
+			return &object.Array{Elements: result}
+		}}
+	case "copyWithin":
+		return &object.Builtin{Name: "copyWithin", Fn: func(args ...object.Object) object.Object {
+			if len(args) < 2 {
+				return arr
+			}
+			target := 0
+			start := 0
+			end := len(arr.Elements)
+			
+			if n, ok := args[0].(*object.Number); ok {
+				target = int(n.Value)
+				if target < 0 {
+					target = len(arr.Elements) + target
+				}
+			}
+			if n, ok := args[1].(*object.Number); ok {
+				start = int(n.Value)
+				if start < 0 {
+					start = len(arr.Elements) + start
+				}
+			}
+			if len(args) > 2 {
+				if n, ok := args[2].(*object.Number); ok {
+					end = int(n.Value)
+					if end < 0 {
+						end = len(arr.Elements) + end
+					}
+				}
+			}
+			
+			// Copy elements
+			count := end - start
+			if target+count > len(arr.Elements) {
+				count = len(arr.Elements) - target
+			}
+			for i := 0; i < count; i++ {
+				arr.Elements[target+i] = arr.Elements[start+i]
+			}
+			return arr
+		}}
 	}
 	return UNDEFINED
+}
+
+// Helper function to flatten arrays
+func flattenArray(elements []object.Object, depth int) []object.Object {
+	if depth == 0 {
+		return elements
+	}
+	var result []object.Object
+	for _, elem := range elements {
+		if arr, ok := elem.(*object.Array); ok {
+			result = append(result, flattenArray(arr.Elements, depth-1)...)
+		} else {
+			result = append(result, elem)
+		}
+	}
+	return result
 }
 
 func createArrayIterator(arr *object.Array, method string) *object.Builtin {

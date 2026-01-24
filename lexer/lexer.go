@@ -13,6 +13,13 @@ type Lexer struct {
 	ch           byte // current char under examination
 	line         int  // current line number
 	column       int  // current column number
+	
+	// Saved state for regex parsing
+	savedPosition     int
+	savedReadPosition int
+	savedCh           byte
+	savedLine         int
+	savedColumn       int
 }
 
 // New creates a new Lexer instance
@@ -20,6 +27,35 @@ func New(input string) *Lexer {
 	l := &Lexer{input: input, line: 1, column: 0}
 	l.readChar()
 	return l
+}
+
+// SavePosition saves the current lexer position for later restoration
+func (l *Lexer) SavePosition() {
+	l.savedPosition = l.position
+	l.savedReadPosition = l.readPosition
+	l.savedCh = l.ch
+	l.savedLine = l.line
+	l.savedColumn = l.column
+}
+
+// RestorePosition restores the lexer to the previously saved position
+func (l *Lexer) RestorePosition() {
+	l.position = l.savedPosition
+	l.readPosition = l.savedReadPosition
+	l.ch = l.savedCh
+	l.line = l.savedLine
+	l.column = l.savedColumn
+}
+
+// SetPosition sets the lexer to a specific position
+func (l *Lexer) SetPosition(pos int) {
+	l.position = pos
+	l.readPosition = pos + 1
+	if pos < len(l.input) {
+		l.ch = l.input[pos]
+	} else {
+		l.ch = 0
+	}
 }
 
 // readChar reads the next character and advances the position
@@ -117,11 +153,12 @@ func (l *Lexer) NextToken() token.Token {
 			tok = newToken(token.BANG, l.ch, l.line, l.column)
 		}
 	case '/':
+		slashPos := l.position // Save position for potential regex restoration
 		if l.peekChar() == '=' {
 			l.readChar()
-			tok = token.Token{Type: token.SLASH_ASSIGN, Literal: "/=", Line: l.line, Column: l.column}
+			tok = token.Token{Type: token.SLASH_ASSIGN, Literal: "/=", Line: l.line, Column: l.column, Position: slashPos}
 		} else {
-			tok = newToken(token.SLASH, l.ch, l.line, l.column)
+			tok = token.Token{Type: token.SLASH, Literal: "/", Line: l.line, Column: l.column, Position: slashPos}
 		}
 	case '*':
 		if l.peekChar() == '*' {
@@ -284,7 +321,7 @@ func (l *Lexer) NextToken() token.Token {
 }
 
 func newToken(tokenType token.TokenType, ch byte, line, column int) token.Token {
-	return token.Token{Type: tokenType, Literal: string(ch), Line: line, Column: column}
+	return token.Token{Type: tokenType, Literal: string(ch), Line: line, Column: column, Position: 0}
 }
 
 func (l *Lexer) readIdentifier() string {
@@ -486,11 +523,15 @@ func isDigit(ch byte) bool {
 }
 
 // ScanRegex scans a regex literal /pattern/flags
-// This is called after the parser receives a SLASH token in prefix position.
-// At this point, the opening / has already been consumed by NextToken,
-// so l.ch points to the first character of the pattern.
+// This may be called after SetPosition (lexer at the opening /) or
+// after the opening / was already consumed by NextToken.
 func (l *Lexer) ScanRegex() token.Token {
 	tok := token.Token{Line: l.line, Column: l.column}
+	
+	// If the lexer is positioned at /, consume it
+	if l.ch == '/' {
+		l.readChar()
+	}
 	
 	var pattern []byte
 	

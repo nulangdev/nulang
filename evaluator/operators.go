@@ -123,66 +123,196 @@ func evalDeleteExpression(node ast.Expression, env *object.Environment) object.O
 }
 
 func evalPreIncrement(node ast.Expression, env *object.Environment) object.Object {
-	ident, ok := node.(*ast.Identifier)
-	if !ok {
-		return newError("invalid increment operand")
-	}
-	val, ok := env.Get(ident.Value)
-	if !ok {
-		return newError("%s", "identifier not found: " + ident.Value)
-	}
-	num, ok := val.(*object.Number)
-	if !ok {
-		return newError("increment requires number")
-	}
-	newVal := &object.Number{Value: num.Value + 1}
-	env.Update(ident.Value, newVal)
-	return newVal
+	return evalPrefixIncDec(node, env, 1)
 }
 
 func evalPreDecrement(node ast.Expression, env *object.Environment) object.Object {
-	ident, ok := node.(*ast.Identifier)
-	if !ok {
-		return newError("invalid decrement operand")
+	return evalPrefixIncDec(node, env, -1)
+}
+
+// evalPrefixIncDec handles both ++x and --x for various left-hand side expressions
+func evalPrefixIncDec(node ast.Expression, env *object.Environment, delta float64) object.Object {
+	switch left := node.(type) {
+	case *ast.Identifier:
+		// Simple variable: ++x
+		val, ok := env.Get(left.Value)
+		if !ok {
+			return newError("%s", "identifier not found: "+left.Value)
+		}
+		num, ok := val.(*object.Number)
+		if !ok {
+			return newError("increment/decrement requires number")
+		}
+		newVal := &object.Number{Value: num.Value + delta}
+		env.Update(left.Value, newVal)
+		return newVal
+
+	case *ast.MemberExpression:
+		// Object property: ++obj.prop
+		obj := Eval(left.Object, env)
+		if isError(obj) {
+			return obj
+		}
+		propName := left.Property.(*ast.Identifier).Value
+		
+		switch o := obj.(type) {
+		case *object.ObjectMap:
+			if val, ok := o.Get(propName); ok {
+				if num, ok := val.(*object.Number); ok {
+					newVal := &object.Number{Value: num.Value + delta}
+					o.Set(propName, newVal)
+					return newVal
+				}
+				return newError("increment/decrement requires number")
+			}
+			return newError("property not found: %s", propName)
+		default:
+			return newError("cannot use increment/decrement on %s", obj.Type())
+		}
+
+	case *ast.IndexExpression:
+		// Array index: ++arr[i]
+		obj := Eval(left.Left, env)
+		if isError(obj) {
+			return obj
+		}
+		idx := Eval(left.Index, env)
+		if isError(idx) {
+			return idx
+		}
+
+		switch o := obj.(type) {
+		case *object.Array:
+			if idxNum, ok := idx.(*object.Number); ok {
+				i := int(idxNum.Value)
+				if i < 0 || i >= len(o.Elements) {
+					return newError("array index out of bounds")
+				}
+				if num, ok := o.Elements[i].(*object.Number); ok {
+					newVal := &object.Number{Value: num.Value + delta}
+					o.Elements[i] = newVal
+					return newVal
+				}
+				return newError("increment/decrement requires number")
+			}
+			return newError("array index must be a number")
+		case *object.ObjectMap:
+			key := objectToString(idx)
+			if val, ok := o.Get(key); ok {
+				if num, ok := val.(*object.Number); ok {
+					newVal := &object.Number{Value: num.Value + delta}
+					o.Set(key, newVal)
+					return newVal
+				}
+				return newError("increment/decrement requires number")
+			}
+			return newError("property not found: %s", key)
+		default:
+			return newError("cannot use increment/decrement on %s", obj.Type())
+		}
 	}
-	val, ok := env.Get(ident.Value)
-	if !ok {
-		return newError("%s", "identifier not found: " + ident.Value)
-	}
-	num, ok := val.(*object.Number)
-	if !ok {
-		return newError("decrement requires number")
-	}
-	newVal := &object.Number{Value: num.Value - 1}
-	env.Update(ident.Value, newVal)
-	return newVal
+
+	return newError("invalid increment/decrement operand")
 }
 
 func evalPostfixExpression(node *ast.PostfixExpression, env *object.Environment) object.Object {
-	ident, ok := node.Left.(*ast.Identifier)
-	if !ok {
-		return newError("invalid postfix operand")
-	}
-	val, ok := env.Get(ident.Value)
-	if !ok {
-		return newError("%s", "identifier not found: " + ident.Value)
-	}
-	num, ok := val.(*object.Number)
-	if !ok {
-		return newError("postfix operator requires number")
-	}
-	oldVal := &object.Number{Value: num.Value}
-	var newVal *object.Number
+	// Calculate the increment/decrement based on operator
+	var delta float64
 	switch node.Operator {
 	case "++":
-		newVal = &object.Number{Value: num.Value + 1}
+		delta = 1
 	case "--":
-		newVal = &object.Number{Value: num.Value - 1}
+		delta = -1
 	default:
 		return newError("unknown postfix operator: %s", node.Operator)
 	}
-	env.Update(ident.Value, newVal)
-	return oldVal
+
+	// Handle different types of left-hand side expressions
+	switch left := node.Left.(type) {
+	case *ast.Identifier:
+		// Simple variable: x++
+		val, ok := env.Get(left.Value)
+		if !ok {
+			return newError("%s", "identifier not found: "+left.Value)
+		}
+		num, ok := val.(*object.Number)
+		if !ok {
+			return newError("postfix operator requires number")
+		}
+		oldVal := &object.Number{Value: num.Value}
+		newVal := &object.Number{Value: num.Value + delta}
+		env.Update(left.Value, newVal)
+		return oldVal
+
+	case *ast.MemberExpression:
+		// Object property: obj.prop++
+		obj := Eval(left.Object, env)
+		if isError(obj) {
+			return obj
+		}
+		propName := left.Property.(*ast.Identifier).Value
+		
+		var oldNum float64
+		switch o := obj.(type) {
+		case *object.ObjectMap:
+			if val, ok := o.Get(propName); ok {
+				if num, ok := val.(*object.Number); ok {
+					oldNum = num.Value
+					o.Set(propName, &object.Number{Value: oldNum + delta})
+				} else {
+					return newError("postfix operator requires number")
+				}
+			} else {
+				return newError("property not found: %s", propName)
+			}
+		default:
+			return newError("cannot use postfix operator on %s", obj.Type())
+		}
+		return &object.Number{Value: oldNum}
+
+	case *ast.IndexExpression:
+		// Array index: arr[i]++
+		obj := Eval(left.Left, env)
+		if isError(obj) {
+			return obj
+		}
+		idx := Eval(left.Index, env)
+		if isError(idx) {
+			return idx
+		}
+
+		switch o := obj.(type) {
+		case *object.Array:
+			if idxNum, ok := idx.(*object.Number); ok {
+				i := int(idxNum.Value)
+				if i < 0 || i >= len(o.Elements) {
+					return newError("array index out of bounds")
+				}
+				if num, ok := o.Elements[i].(*object.Number); ok {
+					oldVal := num.Value
+					o.Elements[i] = &object.Number{Value: oldVal + delta}
+					return &object.Number{Value: oldVal}
+				}
+				return newError("postfix operator requires number")
+			}
+			return newError("array index must be a number")
+		case *object.ObjectMap:
+			key := objectToString(idx)
+			if val, ok := o.Get(key); ok {
+				if num, ok := val.(*object.Number); ok {
+					oldVal := num.Value
+					o.Set(key, &object.Number{Value: oldVal + delta})
+					return &object.Number{Value: oldVal}
+				}
+				return newError("postfix operator requires number")
+			}
+			return newError("property not found: %s", key)
+		default:
+			return newError("cannot use postfix operator on %s", obj.Type())
+		}
+	}
+
+	return newError("invalid postfix operand")
 }
 
 func evalInfixExpression(node *ast.InfixExpression, env *object.Environment) object.Object {
@@ -229,9 +359,12 @@ func evalInfixExpression(node *ast.InfixExpression, env *object.Environment) obj
 	case (left.Type() == object.STRING_OBJ || right.Type() == object.STRING_OBJ) && node.Operator == "+":
 		return &object.String{Value: objectToString(left) + objectToString(right)}
 	case node.Operator == "==":
-		return nativeBoolToBooleanObject(left == right)
+		return evalLooseEquality(left, right)
 	case node.Operator == "!=":
-		return nativeBoolToBooleanObject(left != right)
+		if evalLooseEquality(left, right) == TRUE {
+			return FALSE
+		}
+		return TRUE
 	case node.Operator == "===":
 		return evalStrictEquality(left, right)
 	case node.Operator == "!==":
@@ -244,6 +377,22 @@ func evalInfixExpression(node *ast.InfixExpression, env *object.Environment) obj
 	case node.Operator == "in":
 		return evalInOperator(left, right)
 	}
+	
+	// Handle arithmetic operators with type coercion to numbers
+	// This matches JavaScript behavior where e.g. undefined - 10 = NaN
+	if isArithmeticOperator(node.Operator) {
+		leftNum := toNumber(left)
+		rightNum := toNumber(right)
+		return evalNumberInfix(node.Operator, &object.Number{Value: leftNum}, &object.Number{Value: rightNum})
+	}
+	
+	// Handle comparison operators with type coercion
+	if isComparisonOperator(node.Operator) {
+		leftNum := toNumber(left)
+		rightNum := toNumber(right)
+		return evalNumberInfix(node.Operator, &object.Number{Value: leftNum}, &object.Number{Value: rightNum})
+	}
+	
 	return newError("unknown operator: %s %s %s", left.Type(), node.Operator, right.Type())
 }
 
@@ -453,6 +602,81 @@ func evalStrictEquality(left, right object.Object) *object.Boolean {
 	return nativeBoolToBooleanObject(left == right)
 }
 
+// evalLooseEquality implements JavaScript's Abstract Equality Comparison (==)
+// Key rules:
+// - null == undefined is true
+// - undefined == null is true
+// - Same types compare values
+// - String vs Number: convert string to number
+// - Boolean vs anything: convert boolean to number first
+func evalLooseEquality(left, right object.Object) *object.Boolean {
+	// Rule 1: same types - use strict equality for value comparison
+	if left.Type() == right.Type() {
+		return evalStrictEquality(left, right)
+	}
+
+	// Rule 2: null == undefined is true (both directions)
+	if (left.Type() == object.NULL_OBJ && right.Type() == object.UNDEFINED_OBJ) ||
+		(left.Type() == object.UNDEFINED_OBJ && right.Type() == object.NULL_OBJ) {
+		return TRUE
+	}
+
+	// Rule 3: null and undefined are only equal to each other, not to anything else
+	if left.Type() == object.NULL_OBJ || left.Type() == object.UNDEFINED_OBJ ||
+		right.Type() == object.NULL_OBJ || right.Type() == object.UNDEFINED_OBJ {
+		return FALSE
+	}
+
+	// Rule 4: Number vs String - convert string to number
+	if left.Type() == object.NUMBER_OBJ && right.Type() == object.STRING_OBJ {
+		rightNum := toNumber(right)
+		return nativeBoolToBooleanObject(left.(*object.Number).Value == rightNum)
+	}
+	if left.Type() == object.STRING_OBJ && right.Type() == object.NUMBER_OBJ {
+		leftNum := toNumber(left)
+		return nativeBoolToBooleanObject(leftNum == right.(*object.Number).Value)
+	}
+
+	// Rule 5: Boolean vs anything - convert boolean to number and retry
+	if left.Type() == object.BOOLEAN_OBJ {
+		leftNum := toNumber(left)
+		return evalLooseEquality(&object.Number{Value: leftNum}, right)
+	}
+	if right.Type() == object.BOOLEAN_OBJ {
+		rightNum := toNumber(right)
+		return evalLooseEquality(left, &object.Number{Value: rightNum})
+	}
+
+	// Rule 6: Object vs primitive - for now, use reference equality
+	// Full JS would call ToPrimitive here
+	return nativeBoolToBooleanObject(left == right)
+}
+
+// toNumber converts an object to a number (JavaScript ToNumber)
+func toNumber(obj object.Object) float64 {
+	switch o := obj.(type) {
+	case *object.Number:
+		return o.Value
+	case *object.String:
+		val, err := strconv.ParseFloat(o.Value, 64)
+		if err != nil {
+			return math.NaN()
+		}
+		return val
+	case *object.Boolean:
+		if o.Value {
+			return 1
+		}
+		return 0
+	case *object.Null:
+		return 0
+	case *object.Undefined:
+		return math.NaN()
+	default:
+		return math.NaN()
+	}
+}
+
 func evalIfExpression(ie *ast.IfExpression, env *object.Environment) object.Object {
 	condition := Eval(ie.Condition, env)
 	if isError(condition) {
@@ -475,4 +699,22 @@ func evalConditionalExpression(ce *ast.ConditionalExpression, env *object.Enviro
 		return Eval(ce.Consequence, env)
 	}
 	return Eval(ce.Alternative, env)
+}
+
+// isArithmeticOperator checks if the operator is an arithmetic operator
+func isArithmeticOperator(op string) bool {
+	switch op {
+	case "+", "-", "*", "/", "%", "**", "&", "|", "^", "<<", ">>", ">>>":
+		return true
+	}
+	return false
+}
+
+// isComparisonOperator checks if the operator is a comparison operator  
+func isComparisonOperator(op string) bool {
+	switch op {
+	case "<", ">", "<=", ">=":
+		return true
+	}
+	return false
 }

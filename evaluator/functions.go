@@ -1,6 +1,7 @@
 package evaluator
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/nulang/nulang/ast"
@@ -21,15 +22,41 @@ func evalFunctionLiteral(fl *ast.FunctionLiteral, env *object.Environment) objec
 }
 
 func evalCallExpression(ce *ast.CallExpression, env *object.Environment) object.Object {
-	function := Eval(ce.Function, env)
-	if isError(function) {
-		return function
+	// Check if this is a method call (obj.method())
+	// If so, we need to bind 'this' to the object
+	var thisArg object.Object
+	var function object.Object
+	
+	if me, ok := ce.Function.(*ast.MemberExpression); ok {
+		// Evaluate the object first
+		thisArg = Eval(me.Object, env)
+		if isError(thisArg) {
+			return thisArg
+		}
+		
+		// Handle optional chaining
+		if me.Optional && (thisArg.Type() == object.NULL_OBJ || thisArg.Type() == object.UNDEFINED_OBJ) {
+			return UNDEFINED
+		}
+		
+		// Get the method from the object
+		function = evalMemberExpression(me, env)
+		if isError(function) {
+			return function
+		}
+	} else {
+		function = Eval(ce.Function, env)
+		if isError(function) {
+			return function
+		}
 	}
+	
+
 	args := evalExpressions(ce.Arguments, env)
 	if len(args) == 1 && isError(args[0]) {
 		return args[0]
 	}
-	return applyFunction(function, args)
+	return applyFunctionWithThis(function, args, thisArg)
 }
 
 func evalExpressions(exps []ast.Expression, env *object.Environment) []object.Object {
@@ -59,25 +86,42 @@ func evalExpressions(exps []ast.Expression, env *object.Environment) []object.Ob
 }
 
 func applyFunction(fn object.Object, args []object.Object) object.Object {
+	return applyFunctionWithThis(fn, args, nil)
+}
+
+// applyFunctionWithThis applies a function with an optional 'this' context
+// This is used for method calls where obj.method() should have 'this' bound to 'obj'
+func applyFunctionWithThis(fn object.Object, args []object.Object, thisArg object.Object) object.Object {
 	switch fn := fn.(type) {
 	case *object.Function:
 		extendedEnv := extendFunctionEnv(fn, args)
+		// Bind 'this' if provided
+		if thisArg != nil {
+			extendedEnv.Set("this", thisArg)
+		}
 		evaluated := Eval(fn.Body, extendedEnv)
 		return unwrapReturnValue(evaluated)
 	case *object.Builtin:
 		return fn.Fn(args...)
 	case *object.ObjectMap:
 		if call, ok := fn.Get("__call__"); ok {
-			return applyFunction(call, args)
+			return applyFunctionWithThis(call, args, thisArg)
 		}
 	case *ProxyObject:
 		return ProxyApply(fn, UNDEFINED, args, nil)
 	}
+
 	return newError("not a function: %s", fn.Type())
 }
 
 func extendFunctionEnv(fn *object.Function, args []object.Object) *object.Environment {
 	env := object.NewEnclosedEnvironment(fn.Env)
+	
+	// Create the 'arguments' object (array-like object containing all passed arguments)
+	// In JavaScript, 'arguments' is available in all non-arrow functions
+	argumentsArr := &object.Array{Elements: args}
+	env.Set("arguments", argumentsArr)
+	
 	for i, param := range fn.Parameters {
 		if param.IsRest {
 			// Rest parameter: collect all remaining arguments into an array
@@ -135,12 +179,51 @@ func evalIndexExpression(ie *ast.IndexExpression, env *object.Environment) objec
 			return UNDEFINED
 		}
 		return &object.String{Value: string(str.Value[idx])}
+	case left.Type() == object.STRING_OBJ:
+		// String property access (e.g., str['length'])
+		key := objectToString(index)
+		str := left.(*object.String)
+		if key == "length" {
+			return &object.Number{Value: float64(len(str.Value))}
+		}
+		// Support string method access via bracket notation (e.g., str['toUpperCase'])
+		// This is needed for lodash patterns like chr[methodName]()
+		return evalStringProperty(str, key)
+	case left.Type() == object.ARRAY_OBJ && index.Type() != object.NUMBER_OBJ:
+		// Array property access with non-numeric index (e.g., arr['length'], arr['push'])
+		arr := left.(*object.Array)
+		key := objectToString(index)
+		switch key {
+		case "length":
+			return &object.Number{Value: float64(len(arr.Elements))}
+		default:
+			// Return array method if available via evalArrayProperty
+			return evalArrayProperty(arr, key)
+		}
 	case left.Type() == object.OBJECT_OBJ:
 		objMap := left.(*object.ObjectMap)
 		key := objectToString(index)
 		if val, ok := objMap.Get(key); ok {
 			return val
 		}
+		return UNDEFINED
+	case left.Type() == object.FUNCTION_OBJ:
+		// Functions are objects in JavaScript and can have properties accessed via bracket notation
+		fn := left.(*object.Function)
+		key := objectToString(index)
+		if val, ok := fn.Get(key); ok {
+			return val
+		}
+		return UNDEFINED
+	case left.Type() == object.BUILTIN_OBJ:
+		// Builtin functions can also have properties accessed via bracket notation
+		fn := left.(*object.Builtin)
+		key := objectToString(index)
+		return evalBuiltinProperty(fn, key)
+	case left.Type() == object.UNDEFINED_OBJ || left.Type() == object.NULL_OBJ:
+		// In strict JavaScript, accessing properties of undefined/null throws TypeError
+		// But for library compatibility, we'll return undefined instead
+		// This allows optional chaining patterns and guard expressions to work
 		return UNDEFINED
 	}
 	return newError("index operator not supported: %s", left.Type())
@@ -185,6 +268,8 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 		return evalStringProperty(o, propName)
 	case *object.Function:
 		return evalFunctionProperty(o, propName)
+	case *object.Builtin:
+		return evalBuiltinProperty(o, propName)
 	case *object.Buffer:
 		return evalBufferProperty(o, propName)
 	case *object.Promise:
@@ -204,6 +289,18 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 
 func evalFunctionProperty(fn *object.Function, propName string) object.Object {
 	switch propName {
+	case "length":
+		// In JavaScript, function.length returns the number of declared parameters
+		// This is critical for lodash's baseRest/overRest which use func.length to determine
+		// where rest parameters start
+		return &object.Number{Value: float64(len(fn.Parameters))}
+	case "name":
+		// Function name property
+		name := fn.Name
+		if name == "" {
+			name = "anonymous"
+		}
+		return &object.String{Value: name}
 	case "apply":
 		return &object.Builtin{
 			Fn: func(args ...object.Object) object.Object {
@@ -276,6 +373,86 @@ func evalFunctionProperty(fn *object.Function, propName string) object.Object {
 			},
 		}
 	}
+	
+	// Check for custom properties attached to the function
+	if val, ok := fn.Get(propName); ok {
+		return val
+	}
+	
+	// Special handling for prototype - auto-create if it doesn't exist
+	// In JavaScript, all functions have a prototype property
+	if propName == "prototype" {
+		prototype := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		prototype.Set("constructor", fn)
+		fn.Set("prototype", prototype)
+		return prototype
+	}
+	
+	return UNDEFINED
+}
+
+// evalBuiltinProperty handles property access on builtin functions (.call, .apply, .bind)
+func evalBuiltinProperty(fn *object.Builtin, propName string) object.Object {
+	switch propName {
+	case "apply":
+		return &object.Builtin{
+			Name: "apply",
+			Fn: func(args ...object.Object) object.Object {
+				if len(args) < 1 {
+					return fn.Fn()
+				}
+				// thisArg is ignored for builtins, just use the arguments
+				if len(args) >= 2 {
+					if arr, ok := args[1].(*object.Array); ok {
+						return fn.Fn(arr.Elements...)
+					}
+				}
+				return fn.Fn()
+			},
+		}
+	case "call":
+		return &object.Builtin{
+			Name: "call",
+			Fn: func(args ...object.Object) object.Object {
+				// For .call(thisArg, arg1, arg2, ...), we need to invoke the function
+				// with thisArg as context. For builtins like Object.prototype.toString,
+				// we pass thisArg as the first argument so it can detect the type.
+				if len(args) < 1 {
+					return fn.Fn()
+				}
+				// Pass thisArg as first argument, followed by any additional arguments
+				// This enables Object.prototype.toString.call(value) to work correctly
+				allArgs := args // Include thisArg as first arg
+				return fn.Fn(allArgs...)
+			},
+		}
+	case "bind":
+		return &object.Builtin{
+			Name: "bind",
+			Fn: func(args ...object.Object) object.Object {
+				// Return a new builtin that calls the original with bound args
+				boundArgs := args[1:] // Skip thisArg
+				return &object.Builtin{
+					Name: fn.Name,
+					Fn: func(callArgs ...object.Object) object.Object {
+						allArgs := append(boundArgs, callArgs...)
+						return fn.Fn(allArgs...)
+					},
+				}
+			},
+		}
+	case "name":
+		return &object.String{Value: fn.Name}
+	case "length":
+		return &object.Number{Value: 0} // Builtins don't track arity
+	case "toString":
+		return &object.Builtin{
+			Name: "toString",
+			Fn: func(args ...object.Object) object.Object {
+				return &object.String{Value: fmt.Sprintf("function %s() { [native code] }", fn.Name)}
+			},
+		}
+	}
 	return UNDEFINED
 }
 
@@ -316,6 +493,22 @@ func evalAssignmentExpression(ae *ast.AssignmentExpression, env *object.Environm
 			objMap.Set(propName, right)
 			return right
 		}
+		
+		// Handle Function objects (allow setting properties like func.VERSION = "1.0")
+		if fn, ok := obj.(*object.Function); ok {
+			fn.Set(propName, right)
+			return right
+		}
+		
+		// Handle Builtin objects (allow setting properties like lodash.prototype = ...)
+		if _, ok := obj.(*object.Builtin); ok {
+			// Builtins don't support property assignment, but we should not error
+			// Just silently ignore - this matches JS behavior for native functions
+			return right
+		}
+		
+		// Fallback - for any other types, return error with type info for debugging
+		return newError("cannot assign to property '%s' of %s", propName, obj.Type())
 
 	case *ast.IndexExpression:
 		obj := Eval(left.Left, env)
@@ -351,7 +544,7 @@ func evalAssignmentExpression(ae *ast.AssignmentExpression, env *object.Environm
 			return right
 		}
 	}
-	return newError("invalid assignment target")
+	return newError("invalid assignment target: %T for %s", ae.Left, ae.Left.String())
 }
 
 func computeAssignment(op, name string, right object.Object, env *object.Environment) object.Object {

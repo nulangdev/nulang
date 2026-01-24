@@ -151,6 +151,7 @@ type Function struct {
 	Env        *Environment
 	Name       string
 	IsAsync    bool
+	Properties map[string]Object // Properties attached to the function (e.g., VERSION)
 }
 
 func (f *Function) Type() ObjectType { return FUNCTION_OBJ }
@@ -173,6 +174,23 @@ func (f *Function) Inspect() string {
 	out.WriteString(f.Body.String())
 	out.WriteString("\n}")
 	return out.String()
+}
+
+// Get retrieves a property from the function
+func (f *Function) Get(key string) (Object, bool) {
+	if f.Properties == nil {
+		return nil, false
+	}
+	val, ok := f.Properties[key]
+	return val, ok
+}
+
+// Set sets a property on the function
+func (f *Function) Set(key string, value Object) {
+	if f.Properties == nil {
+		f.Properties = make(map[string]Object)
+	}
+	f.Properties[key] = value
 }
 
 // BuiltinFunction represents a built-in function signature
@@ -219,10 +237,35 @@ type ObjectMap struct {
 
 func (o *ObjectMap) Type() ObjectType { return OBJECT_OBJ }
 func (o *ObjectMap) Inspect() string {
+	return o.InspectWithDepth(0)
+}
+
+// InspectWithDepth returns a string representation with recursion depth limit
+func (o *ObjectMap) InspectWithDepth(depth int) string {
+	if o.Pairs == nil {
+		return "{}"
+	}
+	if depth > 2 {
+		return "{...}"
+	}
 	var out bytes.Buffer
 	pairs := []string{}
-	for _, pair := range o.Pairs {
-		pairs = append(pairs, fmt.Sprintf("%s: %s", pair.Key.Inspect(), pair.Value.Inspect()))
+	for key, pair := range o.Pairs {
+		keyStr := key
+		valStr := "undefined"
+		if pair.Value != nil {
+			// Check if it's a self-reference or circular
+			if innerMap, ok := pair.Value.(*ObjectMap); ok {
+				if innerMap == o {
+					valStr = "[Circular]"
+				} else {
+					valStr = innerMap.InspectWithDepth(depth + 1)
+				}
+			} else {
+				valStr = pair.Value.Inspect()
+			}
+		}
+		pairs = append(pairs, fmt.Sprintf("%s: %s", keyStr, valStr))
 	}
 	out.WriteString("{")
 	out.WriteString(strings.Join(pairs, ", "))
@@ -232,6 +275,12 @@ func (o *ObjectMap) Inspect() string {
 
 // Get retrieves a property from the object or its prototype chain
 func (o *ObjectMap) Get(key string) (Object, bool) {
+	if o.Pairs == nil {
+		if o.Prototype != nil {
+			return o.Prototype.Get(key)
+		}
+		return nil, false
+	}
 	if pair, ok := o.Pairs[key]; ok {
 		return pair.Value, true
 	}

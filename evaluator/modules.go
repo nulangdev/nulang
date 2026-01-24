@@ -116,10 +116,28 @@ func LoadModule(modulePath string, basePath string) (object.Object, error) {
 	module := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 	module.Set("exports", exports)
 	
+	// Add require function to module for CommonJS compatibility (used by lodash)
+	moduleRequire := &object.Builtin{Name: "require", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("require() requires a module path")
+		}
+		modulePath := objectToString(args[0])
+		mod, err := LoadModule(modulePath, resolvedPath)
+		if err != nil {
+			return newError("Cannot find module '%s': %s", modulePath, err.Error())
+		}
+		return mod
+	}}
+	module.Set("require", moduleRequire)
+	
 	moduleEnv.Set("exports", exports)
 	moduleEnv.Set("module", module)
 	moduleEnv.Set("__filename", &object.String{Value: resolvedPath})
 	moduleEnv.Set("__dirname", &object.String{Value: filepath.Dir(resolvedPath)})
+
+	// Variable and function hoisting for module scope
+	hoistVars(program.Statements, moduleEnv)
+	hoistFunctions(program.Statements, moduleEnv)
 
 	// Evaluate the module
 	result := evalModuleProgram(program, moduleEnv)

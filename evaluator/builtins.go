@@ -16,6 +16,53 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
+// getObjectTag returns the JavaScript-style "[object Type]" tag for type detection
+// This is used by Object.prototype.toString.call(value) pattern which lodash relies on
+func getObjectTag(obj object.Object) string {
+	switch obj.(type) {
+	case *object.Null:
+		return "[object Null]"
+	case *object.Undefined:
+		return "[object Undefined]"
+	case *object.Boolean:
+		return "[object Boolean]"
+	case *object.Number:
+		return "[object Number]"
+	case *object.String:
+		return "[object String]"
+	case *object.Array:
+		return "[object Array]"
+	case *object.Function:
+		return "[object Function]"
+	case *object.Builtin:
+		return "[object Function]"
+	case *object.RegExp:
+		return "[object RegExp]"
+	case *object.Promise:
+		return "[object Promise]"
+	case *object.Symbol:
+		return "[object Symbol]"
+	case *object.BigInt:
+		return "[object BigInt]"
+	case *object.Error:
+		return "[object Error]"
+	case *object.ObjectMap:
+		// Check for special object types by looking for markers
+		if om, ok := obj.(*object.ObjectMap); ok {
+			if name, exists := om.Get("__name__"); exists {
+				if nameStr, ok := name.(*object.String); ok {
+					return "[object " + nameStr.Value + "]"
+				}
+			}
+		}
+		return "[object Object]"
+	case *object.ReturnValue:
+		return "[object Object]"
+	default:
+		return "[object Object]"
+	}
+}
+
 // builtins contains all global built-in objects and functions
 var builtins map[string]object.Object
 
@@ -577,6 +624,52 @@ func initBuiltins() {
 	
 	// Object constructor
 	objectObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Constructor for Object() - creates a new object or returns the object form of the argument
+	// IMPORTANT: Object(value) should return:
+	// - For null/undefined: new empty object
+	// - For objects/arrays: the same reference (not a copy)
+	// - For primitives: boxed object (we simplify this)
+	objectObj.Set("__call__", &object.Builtin{Name: "Object", Fn: func(args ...object.Object) object.Object {
+		if len(args) == 0 {
+			return &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		}
+		// Return the same reference for objects, arrays, functions, etc.
+		switch v := args[0].(type) {
+		case *object.ObjectMap:
+			return v
+		case *object.Array:
+			// Arrays are objects in JS - return the same reference
+			return v
+		case *object.Function:
+			return v
+		case *object.Builtin:
+			return v
+		case *object.RegExp:
+			return v
+		case *object.Promise:
+			return v
+		case *object.Null, *object.Undefined:
+			return &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		case *object.String:
+			// Box primitives (simplified - in real JS these have prototype methods)
+			boxed := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+			boxed.Set("valueOf", &object.Builtin{Fn: func(args ...object.Object) object.Object { return v }})
+			return boxed
+		case *object.Number:
+			boxed := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+			boxed.Set("valueOf", &object.Builtin{Fn: func(args ...object.Object) object.Object { return v }})
+			return boxed
+		case *object.Boolean:
+			boxed := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+			boxed.Set("valueOf", &object.Builtin{Fn: func(args ...object.Object) object.Object { return v }})
+			return boxed
+		default:
+			// For any other object type, return as-is
+			return args[0]
+		}
+	}})
+	
 	objectObj.Set("keys", &object.Builtin{Name: "keys", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {
 			return &object.Array{Elements: []object.Object{}}
@@ -644,6 +737,38 @@ func initBuiltins() {
 		}
 		return &object.Array{Elements: []object.Object{}}
 	}})
+	
+	// Object.prototype with standard methods for type detection
+	objectPrototype := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Object.prototype.toString - returns "[object Type]" format used for type detection
+	// IMPORTANT: This is used by lodash via Object.prototype.toString.call(value) pattern
+	// We create a special builtin that, when accessed via .call(), uses the first argument to detect type
+	objectPrototypeToString := &object.Builtin{
+		Name: "toString",
+		Fn: func(args ...object.Object) object.Object {
+			// When called via .call(value), args[0] is the value to detect type of
+			// When called directly (no args), return [object Object]
+			if len(args) == 0 {
+				return &object.String{Value: "[object Object]"}
+			}
+			return &object.String{Value: getObjectTag(args[0])}
+		},
+	}
+	objectPrototype.Set("toString", objectPrototypeToString)
+	
+	// Object.prototype.hasOwnProperty
+	objectPrototype.Set("hasOwnProperty", &object.Builtin{Name: "hasOwnProperty", Fn: func(args ...object.Object) object.Object {
+		// Simplified - returns false by default
+		return FALSE
+	}})
+	
+	// Object.prototype.valueOf
+	objectPrototype.Set("valueOf", &object.Builtin{Name: "valueOf", Fn: func(args ...object.Object) object.Object {
+		return UNDEFINED
+	}})
+	
+	objectObj.Set("prototype", objectPrototype)
 	builtins["Object"] = objectObj
 	
 	// Global functions
@@ -693,6 +818,10 @@ func initBuiltins() {
 		}
 		return FALSE
 	}}
+	
+	// NaN and Infinity constants
+	builtins["NaN"] = &object.Number{Value: math.NaN()}
+	builtins["Infinity"] = &object.Number{Value: math.Inf(1)}
 	builtins["String"] = &object.Builtin{Name: "String", Fn: func(args ...object.Object) object.Object {
 		if len(args) < 1 {
 			return &object.String{Value: ""}
@@ -722,56 +851,7 @@ func initBuiltins() {
 		}
 		return nativeBoolToBooleanObject(isTruthy(args[0]))
 	}}
-	// Function constructor - handles dynamic function creation
-	// Special case: Function('return this')() is used by lodash to get global object
-	functionObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-	
-	// Create a global object that mimics the global scope
-	globalObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
-	globalObj.Set("Object", builtins["Object"])
-	globalObj.Set("Array", builtins["Array"])
-	globalObj.Set("String", builtins["String"])
-	globalObj.Set("Number", builtins["Number"])
-	globalObj.Set("Boolean", builtins["Boolean"])
-	globalObj.Set("Math", builtins["Math"])
-	globalObj.Set("JSON", builtins["JSON"])
-	globalObj.Set("Date", builtins["Date"])
-	globalObj.Set("Error", builtins["Error"])
-	globalObj.Set("RegExp", builtins["RegExp"])
-	globalObj.Set("Promise", builtins["Promise"])
-	globalObj.Set("Map", builtins["Map"])
-	globalObj.Set("Set", builtins["Set"])
-	globalObj.Set("Symbol", builtins["Symbol"])
-	globalObj.Set("console", builtins["console"])
-	globalObj.Set("undefined", UNDEFINED)
-	// Mark as global
-	globalObj.Set("global", globalObj)
-	globalObj.Set("globalThis", globalObj)
-	globalObj.Set("self", globalObj)
-	globalObj.Set("window", globalObj)
-	
-	functionObj.Set("__call__", &object.Builtin{Name: "Function", Fn: func(args ...object.Object) object.Object {
-		// Check for the common pattern: Function('return this')
-		if len(args) >= 1 {
-			if str, ok := args[len(args)-1].(*object.String); ok {
-				body := strings.TrimSpace(str.Value)
-				if body == "return this" || body == "return this;" {
-					// Return a function that returns the global object
-					return &object.Builtin{Name: "anonymous", Fn: func(args ...object.Object) object.Object {
-						return globalObj
-					}}
-				}
-			}
-		}
-		// Return a no-op function for other cases
-		return &object.Builtin{Name: "anonymous", Fn: func(args ...object.Object) object.Object {
-			return UNDEFINED
-		}}
-	}})
-	functionObj.Set("prototype", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
-	builtins["Function"] = functionObj
-	builtins["global"] = globalObj
-	builtins["globalThis"] = globalObj
+	// Function constructor will be added at the end after globalObj is fully initialized
 	
 	// Built-in modules available globally
 	builtins["fs"] = initFsModule()
@@ -923,6 +1003,107 @@ func initBuiltins() {
 			return newError("Cannot convert %s to BigInt", args[0].Type())
 		}
 	}}
+
+	// ========================================
+	// Global Object and Function Constructor
+	// ========================================
+	// These MUST be initialized LAST after all other builtins are ready
+	// because they reference builtins["Date"], builtins["Error"], etc.
+	
+	// Create a global object that mimics the global scope
+	globalObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	globalObj.Set("Object", builtins["Object"])
+	globalObj.Set("Array", builtins["Array"])
+	globalObj.Set("String", builtins["String"])
+	globalObj.Set("Number", builtins["Number"])
+	globalObj.Set("Boolean", builtins["Boolean"])
+	globalObj.Set("Math", builtins["Math"])
+	globalObj.Set("JSON", builtins["JSON"])
+	globalObj.Set("Date", builtins["Date"])
+	globalObj.Set("Error", builtins["Error"])
+	globalObj.Set("RegExp", builtins["RegExp"])
+	globalObj.Set("Promise", builtins["Promise"])
+	globalObj.Set("Map", builtins["Map"])
+	globalObj.Set("Set", builtins["Set"])
+	globalObj.Set("Symbol", builtins["Symbol"])
+	globalObj.Set("console", builtins["console"])
+	globalObj.Set("undefined", UNDEFINED)
+	globalObj.Set("parseInt", builtins["parseInt"])
+	globalObj.Set("parseFloat", builtins["parseFloat"])
+	globalObj.Set("isNaN", builtins["isNaN"])
+	globalObj.Set("isFinite", builtins["isFinite"])
+	globalObj.Set("setTimeout", builtins["setTimeout"])
+	globalObj.Set("setInterval", builtins["setInterval"])
+	globalObj.Set("clearTimeout", builtins["clearTimeout"])
+	globalObj.Set("clearInterval", builtins["clearInterval"])
+	
+	// Function constructor - handles dynamic function creation
+	// Special case: Function('return this')() is used by lodash to get global object
+	functionObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	functionObj.Set("__call__", &object.Builtin{Name: "Function", Fn: func(args ...object.Object) object.Object {
+		// Check for the common pattern: Function('return this')
+		if len(args) >= 1 {
+			if str, ok := args[len(args)-1].(*object.String); ok {
+				body := strings.TrimSpace(str.Value)
+				if body == "return this" || body == "return this;" {
+					// Return a function that returns the global object
+					return &object.Builtin{Name: "anonymous", Fn: func(args ...object.Object) object.Object {
+						return globalObj
+					}}
+				}
+			}
+		}
+		// Return a no-op function for other cases
+		return &object.Builtin{Name: "anonymous", Fn: func(args ...object.Object) object.Object {
+			return UNDEFINED
+		}}
+	}})
+	
+	// Function.prototype with standard methods
+	functionPrototype := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Function.prototype.toString - returns source representation of function
+	functionPrototype.Set("toString", &object.Builtin{Name: "toString", Fn: func(args ...object.Object) object.Object {
+		// If called on a function, return its string representation
+		// For builtins, return "[native code]" format
+		return &object.String{Value: "function () { [native code] }"}
+	}})
+	
+	// Function.prototype.call - calls function with given this and arguments
+	functionPrototype.Set("call", &object.Builtin{Name: "call", Fn: func(args ...object.Object) object.Object {
+		// This is a stub - actual call behavior is handled in evalBuiltinProperty/evalFunctionProperty
+		return UNDEFINED
+	}})
+	
+	// Function.prototype.apply - calls function with given this and arguments array
+	functionPrototype.Set("apply", &object.Builtin{Name: "apply", Fn: func(args ...object.Object) object.Object {
+		// This is a stub - actual apply behavior is handled in evalBuiltinProperty/evalFunctionProperty
+		return UNDEFINED
+	}})
+	
+	// Function.prototype.bind - returns a new function with bound this
+	functionPrototype.Set("bind", &object.Builtin{Name: "bind", Fn: func(args ...object.Object) object.Object {
+		// This is a stub - actual bind behavior is handled in evalBuiltinProperty/evalFunctionProperty
+		return &object.Builtin{Name: "bound", Fn: func(callArgs ...object.Object) object.Object {
+			return UNDEFINED
+		}}
+	}})
+	
+	functionObj.Set("prototype", functionPrototype)
+	builtins["Function"] = functionObj
+	
+	// Add Function to globalObj
+	globalObj.Set("Function", functionObj)
+	
+	// Mark as global with self-references
+	globalObj.Set("global", globalObj)
+	globalObj.Set("globalThis", globalObj)
+	globalObj.Set("self", globalObj)
+	globalObj.Set("window", globalObj)
+	
+	// Update global builtins
+	builtins["global"] = globalObj
+	builtins["globalThis"] = globalObj
 }
 
 func stringify(obj object.Object) string {

@@ -64,7 +64,7 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.TemplateLiteral:
 		return evalTemplateLiteral(node, env)
 	case *ast.RegexLiteral:
-		return &object.RegExp{Pattern: node.Pattern, Flags: node.Flags}
+		return createRegExp(node.Pattern, node.Flags)
 	case *ast.BooleanLiteral:
 		return nativeBoolToBooleanObject(node.Value)
 	case *ast.NullLiteral:
@@ -136,7 +136,9 @@ func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 		env.Set("module", module)
 	}
 	
-	// Function hoisting: collect all function declarations first
+	// Variable and function hoisting: first hoist all var declarations to undefined,
+	// then hoist function declarations (which may overwrite some vars)
+	hoistVars(program.Statements, env)
 	hoistFunctions(program.Statements, env)
 	
 	for _, statement := range program.Statements {
@@ -169,6 +171,108 @@ func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 	return result
 }
 
+// hoistVars collects all var declarations and initializes them to undefined
+// before executing any code in the block, mimicking JavaScript's var hoisting behavior.
+// This is essential for libraries like lodash that use circular bootstrap patterns
+// where variables are referenced before their lexical definition.
+// IMPORTANT: var declarations are hoisted to function scope, not block scope,
+// so we must recursively scan ALL nested blocks (if, while, for, etc.)
+func hoistVars(statements []ast.Statement, env *object.Environment) {
+	for _, stmt := range statements {
+		hoistVarsFromStatement(stmt, env)
+	}
+}
+
+// hoistVarsFromStatement recursively extracts var declarations from a statement
+func hoistVarsFromStatement(stmt ast.Statement, env *object.Environment) {
+	switch s := stmt.(type) {
+	case *ast.VarStatement:
+		// Only hoist if the variable is not already defined
+		// (to avoid overwriting function declarations that were hoisted first in the same scope)
+		if _, ok := env.Get(s.Name.Value); !ok {
+			env.Set(s.Name.Value, UNDEFINED)
+		}
+		// Also hoist any additional declarations in comma-separated vars
+		for _, decl := range s.Declarations {
+			if _, ok := env.Get(decl.Name.Value); !ok {
+				env.Set(decl.Name.Value, UNDEFINED)
+			}
+		}
+	case *ast.ForStatement:
+		// Hoist var declarations inside for loop init
+		if varStmt, ok := s.Init.(*ast.VarStatement); ok {
+			hoistVarsFromStatement(varStmt, env)
+		}
+		// Also scan the body
+		if s.Body != nil {
+			hoistVars(s.Body.Statements, env)
+		}
+	case *ast.ForInStatement:
+		// Hoist var declarations inside for-in loop
+		if s.IsVar {
+			if _, ok := env.Get(s.Key.Value); !ok {
+				env.Set(s.Key.Value, UNDEFINED)
+			}
+		}
+		// Also scan the body
+		if s.Body != nil {
+			hoistVars(s.Body.Statements, env)
+		}
+	case *ast.WhileStatement:
+		// Scan while body
+		if s.Body != nil {
+			hoistVars(s.Body.Statements, env)
+		}
+	case *ast.DoWhileStatement:
+		// Scan do-while body
+		if s.Body != nil {
+			hoistVars(s.Body.Statements, env)
+		}
+	case *ast.SwitchStatement:
+		// Scan all case bodies
+		for _, c := range s.Cases {
+			if c.Body != nil {
+				hoistVars(c.Body.Statements, env)
+			}
+		}
+		// Scan default body
+		if s.Default != nil {
+			hoistVars(s.Default.Statements, env)
+		}
+	case *ast.TryStatement:
+		// Scan try block
+		if s.Block != nil {
+			hoistVars(s.Block.Statements, env)
+		}
+		// Scan catch block
+		if s.CatchBlock != nil {
+			hoistVars(s.CatchBlock.Statements, env)
+		}
+		// Scan finally block
+		if s.FinallyBlock != nil {
+			hoistVars(s.FinallyBlock.Statements, env)
+		}
+	case *ast.BlockStatement:
+		// Scan block contents
+		hoistVars(s.Statements, env)
+	case *ast.LabeledStatement:
+		// Scan the labeled statement's body
+		if s.Body != nil {
+			hoistVarsFromStatement(s.Body, env)
+		}
+	case *ast.ExpressionStatement:
+		// Check for if expressions inside expression statements
+		if ie, ok := s.Expression.(*ast.IfExpression); ok {
+			if ie.Consequence != nil {
+				hoistVars(ie.Consequence.Statements, env)
+			}
+			if ie.Alternative != nil {
+				hoistVars(ie.Alternative.Statements, env)
+			}
+		}
+	}
+}
+
 // hoistFunctions collects function declarations and adds them to the environment
 // before executing any code in the block, mimicking JavaScript's hoisting behavior
 func hoistFunctions(statements []ast.Statement, env *object.Environment) {
@@ -194,7 +298,8 @@ func hoistFunctions(statements []ast.Statement, env *object.Environment) {
 func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {
 	var result object.Object = UNDEFINED
 	
-	// Function hoisting within block
+	// Variable and function hoisting within block
+	hoistVars(block.Statements, env)
 	hoistFunctions(block.Statements, env)
 	
 	for _, statement := range block.Statements {

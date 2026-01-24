@@ -430,6 +430,19 @@ func evalNewExpressionWithClass(ne *ast.NewExpression, env *object.Environment) 
 	if fn, ok := classObj.(*object.Function); ok {
 		// Create instance
 		instance := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		
+		// Copy prototype properties to instance (JavaScript prototype inheritance)
+		// This enables patterns like: Hash.prototype.clear = fn; new Hash() -> this.clear() works
+		if prototype, ok := fn.Get("prototype"); ok {
+			if protoObj, ok := prototype.(*object.ObjectMap); ok {
+				for key, pair := range protoObj.Pairs {
+					instance.Set(key, pair.Value)
+				}
+				// Also set the Prototype chain for proper prototype lookup
+				instance.Prototype = protoObj
+			}
+		}
+		
 		instanceEnv := object.NewEnclosedEnvironment(fn.Env)
 		instanceEnv.Set("this", instance)
 

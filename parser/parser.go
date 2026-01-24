@@ -1053,6 +1053,14 @@ func (p *Parser) parseUndefinedLiteral() ast.Expression {
 
 // parseRegexLiteral parses a regex literal /pattern/flags
 func (p *Parser) parseRegexLiteral() ast.Expression {
+	// CRITICAL: When this function is called, curToken is SLASH but peekToken
+	// has already been read, meaning the lexer has advanced past the regex pattern.
+	// We need to restore the lexer to the SLASH position before scanning the regex.
+	slashPosition := p.curToken.Position
+	if slashPosition > 0 {
+		p.l.SetPosition(slashPosition)
+	}
+	
 	// Use the lexer's ScanRegex to get the full regex token
 	tok := p.l.ScanRegex()
 	
@@ -1068,27 +1076,25 @@ func (p *Parser) parseRegexLiteral() ast.Expression {
 	// Parse the literal to extract pattern and flags
 	// Format: /pattern/flags
 	literal := tok.Literal
+	
 	if len(literal) < 2 || literal[0] != '/' {
 		msg := fmt.Sprintf("line %d: malformed regex literal", tok.Line)
 		p.errors = append(p.errors, msg)
 		return nil
 	}
 	
-	// Find the closing /
+	// Find the closing / by scanning backward
+	// The format is /pattern/flags, so we look for the last / from the end
+	// Characters after the last / can only be valid flags (g,i,m,s,u,y,d)
 	lastSlash := -1
 	for i := len(literal) - 1; i > 0; i-- {
 		if literal[i] == '/' {
 			lastSlash = i
 			break
 		}
-		// If we hit a non-flag character before finding /, the regex is malformed
-		ch := literal[i]
-		if ch != 'g' && ch != 'i' && ch != 'm' && ch != 's' && ch != 'u' && ch != 'y' && ch != 'd' {
-			lastSlash = i
-			break
-		}
 	}
 	
+	// If no closing slash was found, the regex is malformed
 	if lastSlash <= 0 {
 		msg := fmt.Sprintf("line %d: malformed regex literal", tok.Line)
 		p.errors = append(p.errors, msg)

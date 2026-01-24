@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"test\""
+    "test": "../nulang test_lodash.js"
   },
   "dependencies": {
-    "lodash": "^4.17.23"
+    "lodash": "^4.17.23",
+    "lodash-es": "^4.17.23"
   },
   "author": "",
   "license": "ISC"
