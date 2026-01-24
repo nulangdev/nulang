@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/nulang/nulang/evaluator"
 	"github.com/nulang/nulang/lexer"
@@ -28,7 +29,7 @@ func main() {
 	for i, arg := range os.Args[1:] {
 		if arg == "--watch" || arg == "-w" {
 			watchMode = true
-		} else if arg != "" && filename == "" && !isCommand(arg) {
+		} else if arg != "" && filename == "" && !isCommand(arg) && !strings.HasPrefix(arg, "-") {
 			filename = os.Args[i+1]
 		}
 	}
@@ -36,10 +37,22 @@ func main() {
 	// Handle commands
 	if len(os.Args) > 1 && isCommand(os.Args[1]) {
 		switch os.Args[1] {
-		case "install":
-			handleInstall()
+		case "install", "i", "add":
+			handleInstallNew()
+		case "uninstall", "remove", "rm":
+			handleUninstall()
 		case "init":
-			handleInit()
+			handleInitNew()
+		case "list", "ls":
+			handleList()
+		case "run":
+			handleRun()
+		case "update", "upgrade":
+			handleUpdate()
+		case "prune":
+			handlePrune()
+		case "outdated":
+			handleOutdated()
 		case "version", "-v", "--version":
 			fmt.Printf("Nu v%s\n", VERSION)
 		case "help", "-h", "--help":
@@ -65,7 +78,19 @@ func main() {
 }
 
 func isCommand(arg string) bool {
-	commands := []string{"install", "init", "version", "-v", "--version", "help", "-h", "--help", "--watch", "-w"}
+	commands := []string{
+		"install", "i", "add",
+		"uninstall", "remove", "rm",
+		"init",
+		"list", "ls",
+		"run",
+		"update", "upgrade",
+		"prune",
+		"outdated",
+		"version", "-v", "--version",
+		"help", "-h", "--help",
+		"--watch", "-w",
+	}
 	for _, cmd := range commands {
 		if arg == cmd {
 			return true
@@ -74,27 +99,113 @@ func isCommand(arg string) bool {
 	return false
 }
 
-func handleInstall() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-		os.Exit(1)
+// handleInstallNew handles install command with npm-compatible package.json
+func handleInstallNew() {
+	// Parse flags and packages
+	flags := make(map[string]bool)
+	var packages []string
+
+	for _, arg := range os.Args[2:] {
+		if strings.HasPrefix(arg, "--") {
+			flags[strings.TrimPrefix(arg, "--")] = true
+		} else if strings.HasPrefix(arg, "-") {
+			flags[strings.TrimPrefix(arg, "-")] = true
+		} else {
+			packages = append(packages, arg)
+		}
 	}
 
-	if err := evaluator.InstallDependencies(cwd); err != nil {
+	if err := evaluator.HandleInstallCommand(packages, flags); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
 }
 
-func handleInit() {
+// handleUninstall handles uninstall command
+func handleUninstall() {
+	packages := os.Args[2:]
+	if err := evaluator.HandleUninstallCommand(packages); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// handleInitNew handles init command with npm-compatible package.json
+func handleInitNew() {
 	cwd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
 
-	if err := evaluator.InitProject(cwd); err != nil {
+	// Check for -y flag for non-interactive
+	interactive := true
+	for _, arg := range os.Args[2:] {
+		if arg == "-y" || arg == "--yes" {
+			interactive = false
+			break
+		}
+	}
+
+	var initErr error
+	if interactive {
+		initErr = evaluator.InitProjectJSONInteractive(cwd)
+	} else {
+		initErr = evaluator.InitProjectJSON(cwd)
+	}
+
+	if initErr != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", initErr)
+		os.Exit(1)
+	}
+}
+
+// handleList handles list command
+func handleList() {
+	if err := evaluator.HandleListCommand(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// handleRun handles run command
+func handleRun() {
+	scriptName := ""
+	var args []string
+
+	if len(os.Args) > 2 {
+		scriptName = os.Args[2]
+		if len(os.Args) > 3 {
+			args = os.Args[3:]
+		}
+	}
+
+	if err := evaluator.HandleRunCommand(scriptName, args); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// handleUpdate handles update command
+func handleUpdate() {
+	packages := os.Args[2:]
+	if err := evaluator.HandleUpdateCommand(packages); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// handlePrune handles prune command
+func handlePrune() {
+	if err := evaluator.HandlePruneCommand(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
+}
+
+// handleOutdated handles outdated command
+func handleOutdated() {
+	if err := evaluator.HandleOutdatedCommand(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
@@ -107,14 +218,25 @@ func printCLIHelp() {
 	fmt.Println("  nu <file.ts> --watch   Run with hot reload on changes")
 	fmt.Println("  nu                     Start the REPL")
 	fmt.Println()
-	fmt.Println("Commands:")
-	fmt.Println("  install              Install dependencies from nulang.yml")
-	fmt.Println("  init                 Create a new nulang.yml file")
-	fmt.Println("  version, -v          Show version")
-	fmt.Println("  help, -h             Show this help")
+	fmt.Println("Package Management (npm-compatible):")
+	fmt.Println("  init                   Create package.json")
+	fmt.Println("  init -y                Create package.json with defaults")
+	fmt.Println("  install, i             Install all dependencies")
+	fmt.Println("  install <pkg>          Install a package (adds to package.json)")
+	fmt.Println("  install <pkg> -D       Install as devDependency")
+	fmt.Println("  uninstall <pkg>        Remove a package")
+	fmt.Println("  update [pkg...]        Update packages")
+	fmt.Println("  list, ls               List installed packages")
+	fmt.Println("  outdated               Show outdated packages")
+	fmt.Println("  prune                  Remove extraneous packages")
+	fmt.Println("  run <script>           Run a script from package.json")
+	fmt.Println()
+	fmt.Println("Other Commands:")
+	fmt.Println("  version, -v            Show version")
+	fmt.Println("  help, -h               Show this help")
 	fmt.Println()
 	fmt.Println("Flags:")
-	fmt.Println("  --watch, -w          Watch for file changes and auto-reload")
+	fmt.Println("  --watch, -w            Watch for file changes and auto-reload")
 	fmt.Println()
 }
 

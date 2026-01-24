@@ -70,22 +70,46 @@ Uma linguagem de programação com sintaxe JavaScript/Node.js escrita em Go, pen
 
 ## Uso
 
-### CLI e gerenciamento de pacotes
+### CLI e gerenciamento de pacotes (npm-compatível)
 
 ```bash
-# Criar um novo projeto (gera nulang.yml)
+# Criar um novo projeto (gera package.json)
 nu init
+nu init -y   # modo não-interativo
 
-# Instalar dependências listadas em nulang.yml e gerar/atualizar nulang.lock
+# Instalar todas as dependências do package.json
 nu install
 
-# Rodar um arquivo normalmente
+# Instalar um pacote específico (salva em package.json)
+nu install lodash
+nu install lodash@4.17.21   # versão específica
+nu install eslint -D        # como devDependency
+
+# Remover um pacote
+nu uninstall lodash
+
+# Listar pacotes instalados
+nu list
+
+# Verificar pacotes desatualizados
+nu outdated
+
+# Atualizar pacotes
+nu update
+
+# Executar scripts do package.json
+nu run test
+nu run build
+
+# Rodar um arquivo
 nu caminho/para/arquivo.js
 ```
 
-- **nulang.yml**: manifest YAML com `name`, `version`, `main` e `dependencies`.
-- **nulang.lock**: lockfile gerado automaticamente contendo URL, commit e checksum de cada dependência instalada.
-- **node_modules/**: diretório onde os pacotes baixados são armazenados (semelhante ao `node_modules` do Node.js).
+### Arquivos de configuração
+
+- **package.json**: manifest JSON compatível com npm, com `name`, `version`, `main`, `scripts`, `dependencies`, etc.
+- **package-lock.json**: lockfile gerado automaticamente contendo versões exatas, URLs e checksums (SHA-512).
+- **node_modules/**: diretório onde os pacotes do npm são instalados.
 
 ### Executar arquivo
 
@@ -117,23 +141,34 @@ nu index.js --watch
 
 ### Estrutura de pacote
 
-```yaml
-# nulang.yml
-name: meu-projeto
-version: 1.0.0
-main: index.js
-dependencies:
-  math-tools: https://github.com/exemplo/math-tools
-  http-utils: https://github.com/exemplo/http-utils
+```json
+// package.json
+{
+  "name": "meu-projeto",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "nu index.js",
+    "test": "nu test.js"
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "eslint": "^8.0.0"
+  }
+}
 ```
 
 ```text
 meu-projeto/
-├── nulang.yml          # manifest (criado por nu init)
-├── nulang.lock         # lockfile (criado/atualizado por nu install)
-├── node_modules/       # pacotes instalados
-│   └── math-tools/
-│       └── index.js
+├── package.json            # manifest (criado por nu init)
+├── package-lock.json       # lockfile (criado/atualizado por nu install)
+├── node_modules/           # pacotes instalados do npm
+│   ├── lodash/
+│   │   ├── package.json
+│   │   └── ...
+│   └── .bin/               # binários dos pacotes
 ├── index.js
 └── lib/
     └── api.js

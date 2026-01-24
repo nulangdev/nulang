@@ -3,6 +3,7 @@ package evaluator
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/nulang/nulang/ast"
@@ -190,13 +191,68 @@ func resolveModulePath(modulePath string, basePath string) string {
 	// Check node_modules directory for package imports
 	nodeModulesPath := FindNodeModulesPath(basePath)
 	if nodeModulesPath != "" {
-		// Try index.ts first
-		pkgTsPath := filepath.Join(nodeModulesPath, modulePath, "index.ts")
+		pkgDir := filepath.Join(nodeModulesPath, modulePath)
+		
+		// Check for subpath (e.g., "lodash/get")
+		subpath := ""
+		if strings.Contains(modulePath, "/") && !strings.HasPrefix(modulePath, "@") {
+			parts := strings.SplitN(modulePath, "/", 2)
+			pkgDir = filepath.Join(nodeModulesPath, parts[0])
+			subpath = parts[1]
+		} else if strings.HasPrefix(modulePath, "@") {
+			// Scoped package (e.g., "@babel/core" or "@babel/core/lib")
+			parts := strings.SplitN(modulePath, "/", 3)
+			if len(parts) >= 2 {
+				pkgDir = filepath.Join(nodeModulesPath, parts[0], parts[1])
+				if len(parts) > 2 {
+					subpath = parts[2]
+				}
+			}
+		}
+		
+		// Try to read package.json from the package
+		pkgJsonPath := filepath.Join(pkgDir, "package.json")
+		if pkg, err := LoadPackageJSON(pkgJsonPath); err == nil {
+			// If subpath is specified, try to resolve via exports or direct file
+			if subpath != "" {
+				// Try exports field first
+				if exportPath, ok := pkg.GetExportPath(subpath); ok {
+					resolved := filepath.Join(pkgDir, exportPath)
+					if _, err := os.Stat(resolved); err == nil {
+						return resolved
+					}
+				}
+				
+				// Try direct file resolution
+				directPath := filepath.Join(pkgDir, subpath)
+				if _, err := os.Stat(directPath); err == nil {
+					return directPath
+				}
+				if _, err := os.Stat(directPath + ".js"); err == nil {
+					return directPath + ".js"
+				}
+				if _, err := os.Stat(directPath + ".ts"); err == nil {
+					return directPath + ".ts"
+				}
+			} else {
+				// Get main entry point from package.json
+				mainFile := pkg.GetExportsMain()
+				if mainFile != "" {
+					resolved := filepath.Join(pkgDir, mainFile)
+					if _, err := os.Stat(resolved); err == nil {
+						return resolved
+					}
+				}
+			}
+		}
+		
+		// Fallback: Try index.ts first
+		pkgTsPath := filepath.Join(pkgDir, "index.ts")
 		if _, err := os.Stat(pkgTsPath); err == nil {
 			return pkgTsPath
 		}
 		// Try index.js
-		pkgJsPath := filepath.Join(nodeModulesPath, modulePath, "index.js")
+		pkgJsPath := filepath.Join(pkgDir, "index.js")
 		if _, err := os.Stat(pkgJsPath); err == nil {
 			return pkgJsPath
 		}
