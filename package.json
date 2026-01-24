@@ -1,0 +1,13 @@
+{
+  "name": "nulang",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"test\""
+  },
+  "dependencies": {
+    "lodash": "^4.17.23"
+  },
+  "author": "",
+  "license": "ISC"
+}

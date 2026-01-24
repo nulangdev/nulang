@@ -374,6 +374,18 @@ func computeAssignment(op, name string, right object.Object, env *object.Environ
 			return &object.Number{Value: oldNum.Value / rightNum.Value}
 		case "%=":
 			return &object.Number{Value: math.Mod(oldNum.Value, rightNum.Value)}
+		case "&=":
+			return &object.Number{Value: float64(int32(oldNum.Value) & int32(rightNum.Value))}
+		case "|=":
+			return &object.Number{Value: float64(int32(oldNum.Value) | int32(rightNum.Value))}
+		case "^=":
+			return &object.Number{Value: float64(int32(oldNum.Value) ^ int32(rightNum.Value))}
+		case "<<=":
+			return &object.Number{Value: float64(int32(oldNum.Value) << uint32(rightNum.Value))}
+		case ">>=":
+			return &object.Number{Value: float64(int32(oldNum.Value) >> uint32(rightNum.Value))}
+		case ">>>=":
+			return &object.Number{Value: float64(uint32(oldNum.Value) >> uint32(rightNum.Value))}
 		}
 	}
 	if op == "+=" {

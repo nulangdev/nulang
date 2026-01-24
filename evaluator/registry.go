@@ -49,11 +49,11 @@ type PackageVersionInfo struct {
 	DevDependencies map[string]string `json:"devDependencies,omitempty"`
 	PeerDependencies map[string]string `json:"peerDependencies,omitempty"`
 	OptionalDependencies map[string]string `json:"optionalDependencies,omitempty"`
-	Engines         map[string]string `json:"engines,omitempty"`
+	Engines         interface{}       `json:"engines,omitempty"`         // Can be map or array
 	Bin             interface{}       `json:"bin,omitempty"`
-	Scripts         map[string]string `json:"scripts,omitempty"`
+	Scripts         interface{}       `json:"scripts,omitempty"`         // Can be map or null
 	Dist            PackageDist       `json:"dist"`
-	License         string            `json:"license,omitempty"`
+	License         interface{}       `json:"license,omitempty"`         // Can be string or object
 	Deprecated      string            `json:"deprecated,omitempty"`
 	HasInstallScript bool             `json:"hasInstallScript,omitempty"`
 }

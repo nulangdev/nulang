@@ -20,12 +20,16 @@ const (
 	NULLISH_C   // ??
 	OR          // ||
 	AND         // &&
+	BITWISE_O   // |
+	BITWISE_X   // ^
+	BITWISE_A   // &
 	EQUALS      // == === != !==
 	LESSGREATER // > >= < <=
+	SHIFT       // << >> >>>
 	SUM         // + -
 	PRODUCT     // * / %
 	POWER       // **
-	PREFIX      // -X !X ++X --X typeof delete
+	PREFIX      // -X !X ++X --X typeof delete ~
 	POSTFIX     // X++ X--
 	CALL        // myFunction(X)
 	MEMBER      // obj.prop obj[prop]
@@ -38,10 +42,19 @@ var precedences = map[token.TokenType]int{
 	token.ASTERISK_ASSIGN: ASSIGN,
 	token.SLASH_ASSIGN:    ASSIGN,
 	token.PERCENT_ASSIGN:  ASSIGN,
-	token.QUESTION:        TERNARY,
+	token.LSHIFT_ASSIGN:       ASSIGN,
+	token.RSHIFT_ASSIGN:       ASSIGN,
+	token.URSHIFT_ASSIGN:      ASSIGN,
+	token.BITWISE_AND_ASSIGN:  ASSIGN,
+	token.BITWISE_OR_ASSIGN:   ASSIGN,
+	token.BITWISE_XOR_ASSIGN:  ASSIGN,
+	token.QUESTION:            TERNARY,
 	token.NULLISH:         NULLISH_C,
 	token.OR:              OR,
 	token.AND:             AND,
+	token.BITWISE_OR:      BITWISE_O,
+	token.BITWISE_XOR:     BITWISE_X,
+	token.BITWISE_AND:     BITWISE_A,
 	token.EQ:              EQUALS,
 	token.NOT_EQ:          EQUALS,
 	token.EQ3:             EQUALS,
@@ -52,6 +65,9 @@ var precedences = map[token.TokenType]int{
 	token.GT_EQ:           LESSGREATER,
 	token.INSTANCEOF:      LESSGREATER,
 	token.IN:              LESSGREATER,
+	token.LSHIFT:          SHIFT,
+	token.RSHIFT:          SHIFT,
+	token.URSHIFT:         SHIFT,
 	token.PLUS:            SUM,
 	token.MINUS:           SUM,
 	token.SLASH:           PRODUCT,
@@ -99,6 +115,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.NULL, p.parseNullLiteral)
 	p.registerPrefix(token.UNDEFINED, p.parseUndefinedLiteral)
 	p.registerPrefix(token.BANG, p.parsePrefixExpression)
+	p.registerPrefix(token.PLUS, p.parsePrefixExpression)
 	p.registerPrefix(token.MINUS, p.parsePrefixExpression)
 	p.registerPrefix(token.INCREMENT, p.parsePrefixExpression)
 	p.registerPrefix(token.DECREMENT, p.parsePrefixExpression)
@@ -117,6 +134,22 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.CLASS, p.parseClassExpression)
 	p.registerPrefix(token.SUPER, p.parseSuperExpression)
 	p.registerPrefix(token.TEMPLATE_STRING, p.parseTemplateLiteral)
+	p.registerPrefix(token.BITWISE_NOT, p.parsePrefixExpression)
+	p.registerPrefix(token.SLASH, p.parseRegexLiteral)
+	// TypeScript keywords that can be used as identifiers in JavaScript
+	p.registerPrefix(token.GET, p.parseIdentifier)
+	p.registerPrefix(token.SET, p.parseIdentifier)
+	p.registerPrefix(token.TYPE, p.parseIdentifier)
+	p.registerPrefix(token.INTERFACE, p.parseIdentifier)
+	p.registerPrefix(token.IMPLEMENTS, p.parseIdentifier)
+	p.registerPrefix(token.DECLARE, p.parseIdentifier)
+	p.registerPrefix(token.READONLY, p.parseIdentifier)
+	p.registerPrefix(token.PRIVATE, p.parseIdentifier)
+	p.registerPrefix(token.PUBLIC, p.parseIdentifier)
+	p.registerPrefix(token.PROTECTED, p.parseIdentifier)
+	p.registerPrefix(token.FROM, p.parseIdentifier)
+	p.registerPrefix(token.OF, p.parseIdentifier)
+	p.registerPrefix(token.AS, p.parseIdentifier)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -138,6 +171,12 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.NULLISH, p.parseInfixExpression)
 	p.registerInfix(token.INSTANCEOF, p.parseInfixExpression)
 	p.registerInfix(token.IN, p.parseInfixExpression)
+	p.registerInfix(token.BITWISE_AND, p.parseInfixExpression)
+	p.registerInfix(token.BITWISE_OR, p.parseInfixExpression)
+	p.registerInfix(token.BITWISE_XOR, p.parseInfixExpression)
+	p.registerInfix(token.LSHIFT, p.parseInfixExpression)
+	p.registerInfix(token.RSHIFT, p.parseInfixExpression)
+	p.registerInfix(token.URSHIFT, p.parseInfixExpression)
 	p.registerInfix(token.QUESTION, p.parseConditionalExpression)
 	p.registerInfix(token.LPAREN, p.parseCallExpression)
 	p.registerInfix(token.LBRACKET, p.parseIndexExpression)
@@ -149,6 +188,12 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(token.ASTERISK_ASSIGN, p.parseAssignmentExpression)
 	p.registerInfix(token.SLASH_ASSIGN, p.parseAssignmentExpression)
 	p.registerInfix(token.PERCENT_ASSIGN, p.parseAssignmentExpression)
+	p.registerInfix(token.LSHIFT_ASSIGN, p.parseAssignmentExpression)
+	p.registerInfix(token.RSHIFT_ASSIGN, p.parseAssignmentExpression)
+	p.registerInfix(token.URSHIFT_ASSIGN, p.parseAssignmentExpression)
+	p.registerInfix(token.BITWISE_AND_ASSIGN, p.parseAssignmentExpression)
+	p.registerInfix(token.BITWISE_OR_ASSIGN, p.parseAssignmentExpression)
+	p.registerInfix(token.BITWISE_XOR_ASSIGN, p.parseAssignmentExpression)
 	p.registerInfix(token.INCREMENT, p.parsePostfixExpression)
 	p.registerInfix(token.DECREMENT, p.parsePostfixExpression)
 
@@ -206,7 +251,15 @@ func (p *Parser) ParseProgram() *ast.Program {
 }
 
 func (p *Parser) parseStatement() ast.Statement {
+	// Check for labeled statement: identifier followed by colon
+	if p.isIdentLike(p.curToken.Type) && p.peekTokenIs(token.COLON) {
+		return p.parseLabeledStatement()
+	}
+
 	switch p.curToken.Type {
+	case token.SEMICOLON:
+		// Empty statement - just a semicolon
+		return nil
 	case token.LET:
 		return p.parseLetStatement()
 	case token.CONST:
@@ -255,7 +308,7 @@ func (p *Parser) parseStatement() ast.Statement {
 func (p *Parser) parseLetStatement() *ast.LetStatement {
 	stmt := &ast.LetStatement{Token: p.curToken}
 
-	if !p.expectPeek(token.IDENT) {
+	if !p.expectPeekIdentLike() {
 		return nil
 	}
 
@@ -282,7 +335,7 @@ func (p *Parser) parseLetStatement() *ast.LetStatement {
 func (p *Parser) parseConstStatement() *ast.ConstStatement {
 	stmt := &ast.ConstStatement{Token: p.curToken}
 
-	if !p.expectPeek(token.IDENT) {
+	if !p.expectPeekIdentLike() {
 		return nil
 	}
 
@@ -311,7 +364,7 @@ func (p *Parser) parseConstStatement() *ast.ConstStatement {
 func (p *Parser) parseVarStatement() *ast.VarStatement {
 	stmt := &ast.VarStatement{Token: p.curToken}
 
-	if !p.expectPeek(token.IDENT) {
+	if !p.expectPeekIdentLike() {
 		return nil
 	}
 
@@ -326,6 +379,32 @@ func (p *Parser) parseVarStatement() *ast.VarStatement {
 		p.nextToken()
 		p.nextToken()
 		stmt.Value = p.parseExpression(LOWEST)
+	}
+
+	// Handle comma-separated declarations: var a = 1, b = 2, c;
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // consume comma
+		
+		if !p.expectPeekIdentLike() {
+			return nil
+		}
+		
+		extraDecl := &ast.VarDeclaration{
+			Name: &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+		}
+		
+		if p.peekTokenIs(token.COLON) {
+			p.nextToken()
+			p.skipTypeAnnotation(false)
+		}
+		
+		if p.peekTokenIs(token.ASSIGN) {
+			p.nextToken()
+			p.nextToken()
+			extraDecl.Value = p.parseExpression(LOWEST)
+		}
+		
+		stmt.Declarations = append(stmt.Declarations, extraDecl)
 	}
 
 	if p.peekTokenIs(token.SEMICOLON) {
@@ -351,8 +430,8 @@ func (p *Parser) parseReturnStatement() *ast.ReturnStatement {
 	return stmt
 }
 
-func (p *Parser) parseForStatement() *ast.ForStatement {
-	stmt := &ast.ForStatement{Token: p.curToken}
+func (p *Parser) parseForStatement() ast.Statement {
+	forToken := p.curToken
 
 	if !p.expectPeek(token.LPAREN) {
 		return nil
@@ -360,8 +439,72 @@ func (p *Parser) parseForStatement() *ast.ForStatement {
 
 	p.nextToken()
 
-	// Parse initialization
-	if !p.curTokenIs(token.SEMICOLON) {
+	// Check for for-in loop: for (var key in object) or for (key in object)
+	isVar := false
+	if p.curTokenIs(token.VAR) || p.curTokenIs(token.LET) || p.curTokenIs(token.CONST) {
+		isVar = true
+		p.nextToken()
+	}
+
+	// Look ahead to see if this is a for-in loop
+	if p.isIdentLike(p.curToken.Type) && p.peekTokenIs(token.IN) {
+		// This is a for-in loop
+		stmt := &ast.ForInStatement{Token: forToken, IsVar: isVar}
+		stmt.Key = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+		p.nextToken() // skip the identifier
+		p.nextToken() // skip 'in'
+
+		stmt.Object = p.parseExpression(LOWEST)
+
+		if !p.expectPeek(token.RPAREN) {
+			return nil
+		}
+
+		if !p.expectPeek(token.LBRACE) {
+			return nil
+		}
+
+		stmt.Body = p.parseBlockStatement()
+		return stmt
+	}
+
+	// Regular for loop: for (init; cond; update)
+	stmt := &ast.ForStatement{Token: forToken}
+
+	// If we already consumed var/let/const, we need to parse the rest of the initialization
+	if isVar {
+		// Back up and re-parse as a var statement - not ideal but works
+		// We already consumed var/let/const; now parse the variable declaration
+		varStmt := &ast.VarStatement{Token: token.Token{Type: token.VAR, Literal: "var"}}
+		varStmt.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		
+		if p.peekTokenIs(token.ASSIGN) {
+			p.nextToken()
+			p.nextToken()
+			varStmt.Value = p.parseExpression(LOWEST)
+		}
+		stmt.Init = varStmt
+		
+		// Handle comma-separated declarations
+		for p.peekTokenIs(token.COMMA) {
+			p.nextToken()
+			p.nextToken()
+			extraDecl := &ast.VarDeclaration{
+				Name: &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal},
+			}
+			if p.peekTokenIs(token.ASSIGN) {
+				p.nextToken()
+				p.nextToken()
+				extraDecl.Value = p.parseExpression(LOWEST)
+			}
+			varStmt.Declarations = append(varStmt.Declarations, extraDecl)
+		}
+
+		if p.peekTokenIs(token.SEMICOLON) {
+			p.nextToken()
+		}
+	} else if !p.curTokenIs(token.SEMICOLON) {
 		stmt.Init = p.parseStatement()
 	}
 
@@ -538,6 +681,18 @@ func (p *Parser) parseContinueStatement() *ast.ContinueStatement {
 	if p.peekTokenIs(token.SEMICOLON) {
 		p.nextToken()
 	}
+
+	return stmt
+}
+
+func (p *Parser) parseLabeledStatement() *ast.LabeledStatement {
+	stmt := &ast.LabeledStatement{Token: p.curToken}
+	stmt.Label = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+
+	p.nextToken() // consume the label
+	p.nextToken() // consume the colon
+
+	stmt.Body = p.parseStatement()
 
 	return stmt
 }
@@ -896,6 +1051,66 @@ func (p *Parser) parseUndefinedLiteral() ast.Expression {
 	return &ast.UndefinedLiteral{Token: p.curToken}
 }
 
+// parseRegexLiteral parses a regex literal /pattern/flags
+func (p *Parser) parseRegexLiteral() ast.Expression {
+	// Use the lexer's ScanRegex to get the full regex token
+	tok := p.l.ScanRegex()
+	
+	if tok.Type != token.REGEX {
+		msg := fmt.Sprintf("line %d: invalid regex literal", p.curToken.Line)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+	
+	// Update current token to reflect what we scanned
+	p.curToken = tok
+	
+	// Parse the literal to extract pattern and flags
+	// Format: /pattern/flags
+	literal := tok.Literal
+	if len(literal) < 2 || literal[0] != '/' {
+		msg := fmt.Sprintf("line %d: malformed regex literal", tok.Line)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+	
+	// Find the closing /
+	lastSlash := -1
+	for i := len(literal) - 1; i > 0; i-- {
+		if literal[i] == '/' {
+			lastSlash = i
+			break
+		}
+		// If we hit a non-flag character before finding /, the regex is malformed
+		ch := literal[i]
+		if ch != 'g' && ch != 'i' && ch != 'm' && ch != 's' && ch != 'u' && ch != 'y' && ch != 'd' {
+			lastSlash = i
+			break
+		}
+	}
+	
+	if lastSlash <= 0 {
+		msg := fmt.Sprintf("line %d: malformed regex literal", tok.Line)
+		p.errors = append(p.errors, msg)
+		return nil
+	}
+	
+	pattern := literal[1:lastSlash]
+	flags := ""
+	if lastSlash < len(literal)-1 {
+		flags = literal[lastSlash+1:]
+	}
+	
+	// Advance peekToken since we bypassed normal lexer flow
+	p.peekToken = p.l.NextToken()
+	
+	return &ast.RegexLiteral{
+		Token:   tok,
+		Pattern: pattern,
+		Flags:   flags,
+	}
+}
+
 func (p *Parser) parsePrefixExpression() ast.Expression {
 	expression := &ast.PrefixExpression{
 		Token:    p.curToken,
@@ -1007,8 +1222,16 @@ func (p *Parser) parseGroupedExpression() ast.Expression {
 		}
 	}
 
-	// Regular grouped expression
+	// Regular grouped expression - parse first expression
 	exp := p.parseExpression(LOWEST)
+
+	// Handle comma operator (sequence expressions)
+	// (a, b, c) evaluates all and returns the last
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken() // consume comma
+		p.nextToken() // move to next expression
+		exp = p.parseExpression(LOWEST)
+	}
 
 	if !p.expectPeek(token.RPAREN) {
 		return nil
@@ -1164,8 +1387,8 @@ func (p *Parser) parseFunctionLiteral() ast.Expression {
 		p.nextToken()
 	}
 
-	// Handle named functions
-	if p.peekTokenIs(token.IDENT) {
+	// Handle named functions - allow keywords like 'get', 'set', 'type' as function names
+	if p.peekIsIdentLike() {
 		p.nextToken()
 		lit.Name = &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
 	}
@@ -1424,7 +1647,29 @@ func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
 	}
 
 	p.nextToken()
-	list = append(list, p.parseExpression(ASSIGN))
+	
+	// Handle leading elision (e.g., [,1] or [,-0])
+	if p.curTokenIs(token.COMMA) {
+		// Add undefined for the first empty slot
+		list = append(list, &ast.UndefinedLiteral{Token: p.curToken})
+		// Continue to handle more commas
+		for p.curTokenIs(token.COMMA) {
+			if p.peekTokenIs(end) {
+				p.nextToken()
+				return list
+			}
+			p.nextToken()
+			if p.curTokenIs(token.COMMA) {
+				// Another elision
+				list = append(list, &ast.UndefinedLiteral{Token: p.curToken})
+			} else {
+				// Real expression
+				list = append(list, p.parseExpression(ASSIGN))
+			}
+		}
+	} else {
+		list = append(list, p.parseExpression(ASSIGN))
+	}
 
 	for p.peekTokenIs(token.COMMA) {
 		p.nextToken()
@@ -1434,7 +1679,25 @@ func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
 			return list
 		}
 		p.nextToken()
-		list = append(list, p.parseExpression(ASSIGN))
+		// Handle elision (consecutive commas)
+		if p.curTokenIs(token.COMMA) {
+			list = append(list, &ast.UndefinedLiteral{Token: p.curToken})
+			// Keep processing consecutive commas
+			for p.curTokenIs(token.COMMA) {
+				if p.peekTokenIs(end) {
+					p.nextToken()
+					return list
+				}
+				p.nextToken()
+				if p.curTokenIs(token.COMMA) {
+					list = append(list, &ast.UndefinedLiteral{Token: p.curToken})
+				} else {
+					list = append(list, p.parseExpression(ASSIGN))
+				}
+			}
+		} else {
+			list = append(list, p.parseExpression(ASSIGN))
+		}
 	}
 
 	if !p.expectPeek(end) {
@@ -1458,6 +1721,35 @@ func (p *Parser) expectPeek(t token.TokenType) bool {
 		return true
 	}
 	p.peekError(t)
+	return false
+}
+
+// isIdentLike checks if a token can be used as an identifier
+// In JavaScript, TypeScript keywords like type, interface, implements, etc. can be used as variable names
+func (p *Parser) isIdentLike(t token.TokenType) bool {
+	switch t {
+	case token.IDENT, token.UNDEFINED, token.NULL, token.GET, token.SET,
+		token.TYPE, token.INTERFACE, token.IMPLEMENTS, token.DECLARE,
+		token.READONLY, token.PRIVATE, token.PUBLIC, token.PROTECTED,
+		token.ASYNC, token.FROM, token.OF, token.AS:
+		return true
+	default:
+		return false
+	}
+}
+
+// peekIsIdentLike checks if peek token can be used as identifier
+func (p *Parser) peekIsIdentLike() bool {
+	return p.isIdentLike(p.peekToken.Type)
+}
+
+// expectPeekIdentLike expects next token to be identifier-like
+func (p *Parser) expectPeekIdentLike() bool {
+	if p.peekIsIdentLike() {
+		p.nextToken()
+		return true
+	}
+	p.peekError(token.IDENT)
 	return false
 }
 

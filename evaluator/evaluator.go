@@ -38,6 +38,8 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return evalReturnStatement(node, env)
 	case *ast.ForStatement:
 		return evalForStatement(node, env)
+	case *ast.ForInStatement:
+		return evalForInStatement(node, env)
 	case *ast.WhileStatement:
 		return evalWhileStatement(node, env)
 	case *ast.DoWhileStatement:
@@ -48,6 +50,9 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return BREAK
 	case *ast.ContinueStatement:
 		return CONTINUE
+	case *ast.LabeledStatement:
+		// For now, just evaluate the body - proper label handling would require tracking labels
+		return Eval(node.Body, env)
 	case *ast.ThrowStatement:
 		return evalThrowStatement(node, env)
 	case *ast.TryStatement:
@@ -58,6 +63,8 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return &object.String{Value: node.Value}
 	case *ast.TemplateLiteral:
 		return evalTemplateLiteral(node, env)
+	case *ast.RegexLiteral:
+		return &object.RegExp{Pattern: node.Pattern, Flags: node.Flags}
 	case *ast.BooleanLiteral:
 		return nativeBoolToBooleanObject(node.Value)
 	case *ast.NullLiteral:
@@ -129,6 +136,9 @@ func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 		env.Set("module", module)
 	}
 	
+	// Function hoisting: collect all function declarations first
+	hoistFunctions(program.Statements, env)
+	
 	for _, statement := range program.Statements {
 		// Handle import statements
 		if importStmt, ok := statement.(*ast.ImportStatement); ok {
@@ -159,8 +169,34 @@ func evalProgram(program *ast.Program, env *object.Environment) object.Object {
 	return result
 }
 
+// hoistFunctions collects function declarations and adds them to the environment
+// before executing any code in the block, mimicking JavaScript's hoisting behavior
+func hoistFunctions(statements []ast.Statement, env *object.Environment) {
+	for _, stmt := range statements {
+		switch s := stmt.(type) {
+		case *ast.VarStatement:
+			// Check if this is a function declaration: function name() {}
+			// which is parsed as VarStatement with FunctionLiteral value
+			if fl, ok := s.Value.(*ast.FunctionLiteral); ok && fl.Name != nil {
+				fn := &object.Function{
+					Parameters: fl.Parameters,
+					Body:       fl.Body,
+					Env:        env,
+					IsAsync:    fl.IsAsync,
+					Name:       fl.Name.Value,
+				}
+				env.Set(fl.Name.Value, fn)
+			}
+		}
+	}
+}
+
 func evalBlockStatement(block *ast.BlockStatement, env *object.Environment) object.Object {
 	var result object.Object = UNDEFINED
+	
+	// Function hoisting within block
+	hoistFunctions(block.Statements, env)
+	
 	for _, statement := range block.Statements {
 		result = Eval(statement, env)
 		if result != nil {
@@ -204,6 +240,19 @@ func evalVarStatement(vs *ast.VarStatement, env *object.Environment) object.Obje
 		}
 	}
 	env.Set(vs.Name.Value, val)
+	
+	// Handle additional declarations (for comma-separated var declarations)
+	for _, decl := range vs.Declarations {
+		var declVal object.Object = UNDEFINED
+		if decl.Value != nil {
+			declVal = Eval(decl.Value, env)
+			if isError(declVal) {
+				return declVal
+			}
+		}
+		env.Set(decl.Name.Value, declVal)
+	}
+	
 	return val
 }
 
@@ -246,6 +295,51 @@ func evalForStatement(fs *ast.ForStatement, env *object.Environment) object.Obje
 			Eval(fs.Update, loopEnv)
 		}
 	}
+	return UNDEFINED
+}
+
+func evalForInStatement(fs *ast.ForInStatement, env *object.Environment) object.Object {
+	loopEnv := object.NewEnclosedEnvironment(env)
+	
+	obj := Eval(fs.Object, env)
+	if isError(obj) {
+		return obj
+	}
+
+	var keys []string
+
+	switch o := obj.(type) {
+	case *object.ObjectMap:
+		for key := range o.Pairs {
+			keys = append(keys, key)
+		}
+	case *object.Array:
+		for i := range o.Elements {
+			keys = append(keys, fmt.Sprintf("%d", i))
+		}
+	case *object.String:
+		for i := range o.Value {
+			keys = append(keys, fmt.Sprintf("%d", i))
+		}
+	default:
+		return UNDEFINED
+	}
+
+	for _, key := range keys {
+		loopEnv.Set(fs.Key.Value, &object.String{Value: key})
+		
+		result := Eval(fs.Body, loopEnv)
+		if result != nil {
+			if result.Type() == object.RETURN_VALUE_OBJ || result.Type() == object.ERROR_OBJ {
+				return result
+			}
+			if result.Type() == object.BREAK_OBJ {
+				break
+			}
+			// CONTINUE is handled by continuing the loop
+		}
+	}
+	
 	return UNDEFINED
 }
 

@@ -35,6 +35,18 @@ const (
 	PERCENT  TokenType = "%"
 	POWER    TokenType = "**"
 
+	// Bitwise operators
+	BITWISE_AND   TokenType = "&"
+	BITWISE_OR    TokenType = "|"
+	BITWISE_XOR   TokenType = "^"
+	BITWISE_NOT   TokenType = "~"
+	LSHIFT        TokenType = "<<"
+	RSHIFT        TokenType = ">>"
+	URSHIFT       TokenType = ">>>"
+	LSHIFT_ASSIGN TokenType = "<<="
+	RSHIFT_ASSIGN TokenType = ">>="
+	URSHIFT_ASSIGN TokenType = ">>>="
+
 	// Comparison
 	LT     TokenType = "<"
 	GT     TokenType = ">"
@@ -52,11 +64,14 @@ const (
 	OPTIONAL    TokenType = "?."
 
 	// Assignment operators
-	PLUS_ASSIGN     TokenType = "+="
-	MINUS_ASSIGN    TokenType = "-="
-	ASTERISK_ASSIGN TokenType = "*="
-	SLASH_ASSIGN    TokenType = "/="
-	PERCENT_ASSIGN  TokenType = "%="
+	PLUS_ASSIGN        TokenType = "+="
+	MINUS_ASSIGN       TokenType = "-="
+	ASTERISK_ASSIGN    TokenType = "*="
+	SLASH_ASSIGN       TokenType = "/="
+	PERCENT_ASSIGN     TokenType = "%="
+	BITWISE_AND_ASSIGN TokenType = "&="
+	BITWISE_OR_ASSIGN  TokenType = "|="
+	BITWISE_XOR_ASSIGN TokenType = "^="
 
 	// Increment/Decrement
 	INCREMENT TokenType = "++"

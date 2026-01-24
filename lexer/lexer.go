@@ -141,14 +141,38 @@ func (l *Lexer) NextToken() token.Token {
 			tok = newToken(token.PERCENT, l.ch, l.line, l.column)
 		}
 	case '<':
-		if l.peekChar() == '=' {
+		if l.peekChar() == '<' {
+			l.readChar()
+			if l.peekChar() == '=' {
+				l.readChar()
+				tok = token.Token{Type: token.LSHIFT_ASSIGN, Literal: "<<=", Line: l.line, Column: l.column}
+			} else {
+				tok = token.Token{Type: token.LSHIFT, Literal: "<<", Line: l.line, Column: l.column}
+			}
+		} else if l.peekChar() == '=' {
 			l.readChar()
 			tok = token.Token{Type: token.LT_EQ, Literal: "<=", Line: l.line, Column: l.column}
 		} else {
 			tok = newToken(token.LT, l.ch, l.line, l.column)
 		}
 	case '>':
-		if l.peekChar() == '=' {
+		if l.peekChar() == '>' {
+			l.readChar()
+			if l.peekChar() == '>' {
+				l.readChar()
+				if l.peekChar() == '=' {
+					l.readChar()
+					tok = token.Token{Type: token.URSHIFT_ASSIGN, Literal: ">>>=", Line: l.line, Column: l.column}
+				} else {
+					tok = token.Token{Type: token.URSHIFT, Literal: ">>>", Line: l.line, Column: l.column}
+				}
+			} else if l.peekChar() == '=' {
+				l.readChar()
+				tok = token.Token{Type: token.RSHIFT_ASSIGN, Literal: ">>=", Line: l.line, Column: l.column}
+			} else {
+				tok = token.Token{Type: token.RSHIFT, Literal: ">>", Line: l.line, Column: l.column}
+			}
+		} else if l.peekChar() == '=' {
 			l.readChar()
 			tok = token.Token{Type: token.GT_EQ, Literal: ">=", Line: l.line, Column: l.column}
 		} else {
@@ -158,16 +182,31 @@ func (l *Lexer) NextToken() token.Token {
 		if l.peekChar() == '&' {
 			l.readChar()
 			tok = token.Token{Type: token.AND, Literal: "&&", Line: l.line, Column: l.column}
+		} else if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.BITWISE_AND_ASSIGN, Literal: "&=", Line: l.line, Column: l.column}
 		} else {
-			tok = newToken(token.ILLEGAL, l.ch, l.line, l.column)
+			tok = newToken(token.BITWISE_AND, l.ch, l.line, l.column)
 		}
 	case '|':
 		if l.peekChar() == '|' {
 			l.readChar()
 			tok = token.Token{Type: token.OR, Literal: "||", Line: l.line, Column: l.column}
+		} else if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.BITWISE_OR_ASSIGN, Literal: "|=", Line: l.line, Column: l.column}
 		} else {
-			tok = newToken(token.ILLEGAL, l.ch, l.line, l.column)
+			tok = newToken(token.BITWISE_OR, l.ch, l.line, l.column)
 		}
+	case '^':
+		if l.peekChar() == '=' {
+			l.readChar()
+			tok = token.Token{Type: token.BITWISE_XOR_ASSIGN, Literal: "^=", Line: l.line, Column: l.column}
+		} else {
+			tok = newToken(token.BITWISE_XOR, l.ch, l.line, l.column)
+		}
+	case '~':
+		tok = newToken(token.BITWISE_NOT, l.ch, l.line, l.column)
 	case '?':
 		if l.peekChar() == '?' {
 			l.readChar()
@@ -444,4 +483,71 @@ func isLetter(ch byte) bool {
 
 func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
+}
+
+// ScanRegex scans a regex literal /pattern/flags
+// This is called after the parser receives a SLASH token in prefix position.
+// At this point, the opening / has already been consumed by NextToken,
+// so l.ch points to the first character of the pattern.
+func (l *Lexer) ScanRegex() token.Token {
+	tok := token.Token{Line: l.line, Column: l.column}
+	
+	var pattern []byte
+	
+	// Read pattern until unescaped /
+	for l.ch != '/' && l.ch != 0 && l.ch != '\n' {
+		if l.ch == '\\' {
+			// Escape sequence - include both backslash and next char
+			pattern = append(pattern, l.ch)
+			l.readChar()
+			if l.ch != 0 && l.ch != '\n' {
+				pattern = append(pattern, l.ch)
+				l.readChar()
+			}
+		} else if l.ch == '[' {
+			// Character class - read until ]
+			pattern = append(pattern, l.ch)
+			l.readChar()
+			for l.ch != ']' && l.ch != 0 && l.ch != '\n' {
+				if l.ch == '\\' {
+					pattern = append(pattern, l.ch)
+					l.readChar()
+					if l.ch != 0 && l.ch != '\n' {
+						pattern = append(pattern, l.ch)
+						l.readChar()
+					}
+				} else {
+					pattern = append(pattern, l.ch)
+					l.readChar()
+				}
+			}
+			if l.ch == ']' {
+				pattern = append(pattern, l.ch)
+				l.readChar()
+			}
+		} else {
+			pattern = append(pattern, l.ch)
+			l.readChar()
+		}
+	}
+	
+	if l.ch != '/' {
+		tok.Type = token.ILLEGAL
+		tok.Literal = "/" + string(pattern)
+		return tok
+	}
+	
+	l.readChar() // consume closing /
+	
+	// Read flags (g, i, m, s, u, y, d)
+	var flags []byte
+	for l.ch == 'g' || l.ch == 'i' || l.ch == 'm' || l.ch == 's' || l.ch == 'u' || l.ch == 'y' || l.ch == 'd' {
+		flags = append(flags, l.ch)
+		l.readChar()
+	}
+	
+	tok.Type = token.REGEX
+	tok.Literal = "/" + string(pattern) + "/" + string(flags)
+	
+	return tok
 }

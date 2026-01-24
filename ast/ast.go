@@ -104,11 +104,25 @@ func (cs *ConstStatement) String() string {
 	return out.String()
 }
 
-// VarStatement represents a var statement
-type VarStatement struct {
-	Token token.Token
+// VarDeclaration represents a single declaration within a multi-variable declaration
+type VarDeclaration struct {
 	Name  *Identifier
 	Value Expression
+}
+
+func (vd *VarDeclaration) String() string {
+	if vd.Value != nil {
+		return vd.Name.String() + " = " + vd.Value.String()
+	}
+	return vd.Name.String()
+}
+
+// VarStatement represents a var statement (potentially with multiple declarations)
+type VarStatement struct {
+	Token        token.Token
+	Name         *Identifier
+	Value        Expression
+	Declarations []*VarDeclaration // Additional declarations for comma-separated vars
 }
 
 func (vs *VarStatement) statementNode()       {}
@@ -117,9 +131,13 @@ func (vs *VarStatement) String() string {
 	var out bytes.Buffer
 	out.WriteString(vs.TokenLiteral() + " ")
 	out.WriteString(vs.Name.String())
-	out.WriteString(" = ")
 	if vs.Value != nil {
+		out.WriteString(" = ")
 		out.WriteString(vs.Value.String())
+	}
+	for _, decl := range vs.Declarations {
+		out.WriteString(", ")
+		out.WriteString(decl.String())
 	}
 	out.WriteString(";")
 	return out.String()
@@ -217,6 +235,17 @@ func (tl *TemplateLiteral) String() string {
 	out.WriteString("`")
 	return out.String()
 }
+
+// RegexLiteral represents a regex literal /pattern/flags
+type RegexLiteral struct {
+	Token   token.Token
+	Pattern string
+	Flags   string
+}
+
+func (rl *RegexLiteral) expressionNode()      {}
+func (rl *RegexLiteral) TokenLiteral() string { return rl.Token.Literal }
+func (rl *RegexLiteral) String() string       { return "/" + rl.Pattern + "/" + rl.Flags }
 
 // BooleanLiteral represents a boolean literal
 type BooleanLiteral struct {
@@ -536,6 +565,31 @@ func (fs *ForStatement) String() string {
 	return out.String()
 }
 
+// ForInStatement represents a for-in loop: for (var key in object) {}
+type ForInStatement struct {
+	Token  token.Token
+	Key    *Identifier      // The loop variable
+	IsVar  bool             // true if declared with var/let/const
+	Object Expression       // The object to iterate over
+	Body   *BlockStatement
+}
+
+func (fs *ForInStatement) statementNode()       {}
+func (fs *ForInStatement) TokenLiteral() string { return fs.Token.Literal }
+func (fs *ForInStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("for (")
+	if fs.IsVar {
+		out.WriteString("var ")
+	}
+	out.WriteString(fs.Key.String())
+	out.WriteString(" in ")
+	out.WriteString(fs.Object.String())
+	out.WriteString(") ")
+	out.WriteString(fs.Body.String())
+	return out.String()
+}
+
 // WhileStatement represents a while loop
 type WhileStatement struct {
 	Token     token.Token
@@ -633,6 +687,19 @@ type ContinueStatement struct {
 func (cs *ContinueStatement) statementNode()       {}
 func (cs *ContinueStatement) TokenLiteral() string { return cs.Token.Literal }
 func (cs *ContinueStatement) String() string       { return "continue;" }
+
+// LabeledStatement represents a labeled statement like "outer: for (...) {}"
+type LabeledStatement struct {
+	Token token.Token
+	Label *Identifier
+	Body  Statement
+}
+
+func (ls *LabeledStatement) statementNode()       {}
+func (ls *LabeledStatement) TokenLiteral() string { return ls.Token.Literal }
+func (ls *LabeledStatement) String() string {
+	return ls.Label.String() + ": " + ls.Body.String()
+}
 
 // ThrowStatement represents throw
 type ThrowStatement struct {

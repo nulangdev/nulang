@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/nulang/nulang/object"
@@ -721,6 +722,56 @@ func initBuiltins() {
 		}
 		return nativeBoolToBooleanObject(isTruthy(args[0]))
 	}}
+	// Function constructor - handles dynamic function creation
+	// Special case: Function('return this')() is used by lodash to get global object
+	functionObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	
+	// Create a global object that mimics the global scope
+	globalObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+	globalObj.Set("Object", builtins["Object"])
+	globalObj.Set("Array", builtins["Array"])
+	globalObj.Set("String", builtins["String"])
+	globalObj.Set("Number", builtins["Number"])
+	globalObj.Set("Boolean", builtins["Boolean"])
+	globalObj.Set("Math", builtins["Math"])
+	globalObj.Set("JSON", builtins["JSON"])
+	globalObj.Set("Date", builtins["Date"])
+	globalObj.Set("Error", builtins["Error"])
+	globalObj.Set("RegExp", builtins["RegExp"])
+	globalObj.Set("Promise", builtins["Promise"])
+	globalObj.Set("Map", builtins["Map"])
+	globalObj.Set("Set", builtins["Set"])
+	globalObj.Set("Symbol", builtins["Symbol"])
+	globalObj.Set("console", builtins["console"])
+	globalObj.Set("undefined", UNDEFINED)
+	// Mark as global
+	globalObj.Set("global", globalObj)
+	globalObj.Set("globalThis", globalObj)
+	globalObj.Set("self", globalObj)
+	globalObj.Set("window", globalObj)
+	
+	functionObj.Set("__call__", &object.Builtin{Name: "Function", Fn: func(args ...object.Object) object.Object {
+		// Check for the common pattern: Function('return this')
+		if len(args) >= 1 {
+			if str, ok := args[len(args)-1].(*object.String); ok {
+				body := strings.TrimSpace(str.Value)
+				if body == "return this" || body == "return this;" {
+					// Return a function that returns the global object
+					return &object.Builtin{Name: "anonymous", Fn: func(args ...object.Object) object.Object {
+						return globalObj
+					}}
+				}
+			}
+		}
+		// Return a no-op function for other cases
+		return &object.Builtin{Name: "anonymous", Fn: func(args ...object.Object) object.Object {
+			return UNDEFINED
+		}}
+	}})
+	functionObj.Set("prototype", &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)})
+	builtins["Function"] = functionObj
+	builtins["global"] = globalObj
+	builtins["globalThis"] = globalObj
 	
 	// Built-in modules available globally
 	builtins["fs"] = initFsModule()

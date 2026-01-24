@@ -20,11 +20,37 @@ func evalPrefixExpression(node *ast.PrefixExpression, env *object.Environment) o
 	switch node.Operator {
 	case "!":
 		return nativeBoolToBooleanObject(!isTruthy(right))
+	case "+":
+		// Unary plus converts to number
+		switch r := right.(type) {
+		case *object.Number:
+			return r
+		case *object.String:
+			if val, err := strconv.ParseFloat(r.Value, 64); err == nil {
+				return &object.Number{Value: val}
+			}
+			return &object.Number{Value: math.NaN()}
+		case *object.Boolean:
+			if r.Value {
+				return &object.Number{Value: 1}
+			}
+			return &object.Number{Value: 0}
+		case *object.Null, *object.Undefined:
+			return &object.Number{Value: 0}
+		default:
+			return &object.Number{Value: math.NaN()}
+		}
 	case "-":
 		if right.Type() != object.NUMBER_OBJ {
 			return newError("unknown operator: -%s", right.Type())
 		}
 		return &object.Number{Value: -right.(*object.Number).Value}
+	case "~":
+		if right.Type() != object.NUMBER_OBJ {
+			return newError("unknown operator: ~%s", right.Type())
+		}
+		// Bitwise NOT: convert to int32, NOT, convert back
+		return &object.Number{Value: float64(^int32(right.(*object.Number).Value))}
 	case "++":
 		return evalPreIncrement(node.Right, env)
 	case "--":
@@ -366,6 +392,18 @@ func evalNumberInfix(operator string, left, right object.Object) object.Object {
 		return &object.Number{Value: math.Mod(l, r)}
 	case "**":
 		return &object.Number{Value: math.Pow(l, r)}
+	case "&":
+		return &object.Number{Value: float64(int32(l) & int32(r))}
+	case "|":
+		return &object.Number{Value: float64(int32(l) | int32(r))}
+	case "^":
+		return &object.Number{Value: float64(int32(l) ^ int32(r))}
+	case "<<":
+		return &object.Number{Value: float64(int32(l) << uint32(r))}
+	case ">>":
+		return &object.Number{Value: float64(int32(l) >> uint32(r))}
+	case ">>>":
+		return &object.Number{Value: float64(uint32(l) >> uint32(r))}
 	case "<":
 		return nativeBoolToBooleanObject(l < r)
 	case ">":
