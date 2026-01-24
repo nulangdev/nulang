@@ -554,6 +554,68 @@ func (ws *WhileStatement) String() string {
 	return out.String()
 }
 
+// SwitchStatement represents switch/case/default
+type SwitchStatement struct {
+	Token   token.Token
+	Value   Expression
+	Cases   []*CaseClause
+	Default *BlockStatement
+}
+
+func (ss *SwitchStatement) statementNode()       {}
+func (ss *SwitchStatement) TokenLiteral() string { return ss.Token.Literal }
+func (ss *SwitchStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("switch (")
+	out.WriteString(ss.Value.String())
+	out.WriteString(") { ")
+	for _, c := range ss.Cases {
+		out.WriteString(c.String())
+	}
+	if ss.Default != nil {
+		out.WriteString("default: ")
+		out.WriteString(ss.Default.String())
+	}
+	out.WriteString(" }")
+	return out.String()
+}
+
+// CaseClause represents a case within a switch
+type CaseClause struct {
+	Token token.Token
+	Test  Expression
+	Body  *BlockStatement
+}
+
+func (cc *CaseClause) TokenLiteral() string { return cc.Token.Literal }
+func (cc *CaseClause) String() string {
+	var out bytes.Buffer
+	out.WriteString("case ")
+	out.WriteString(cc.Test.String())
+	out.WriteString(": ")
+	out.WriteString(cc.Body.String())
+	return out.String()
+}
+
+// DoWhileStatement represents do...while loop
+type DoWhileStatement struct {
+	Token     token.Token
+	Body      *BlockStatement
+	Condition Expression
+}
+
+func (dw *DoWhileStatement) statementNode()       {}
+func (dw *DoWhileStatement) TokenLiteral() string { return dw.Token.Literal }
+func (dw *DoWhileStatement) String() string {
+	var out bytes.Buffer
+	out.WriteString("do ")
+	out.WriteString(dw.Body.String())
+	out.WriteString(" while (")
+	out.WriteString(dw.Condition.String())
+	out.WriteString(")")
+	return out.String()
+}
+
 // BreakStatement represents break
 type BreakStatement struct {
 	Token token.Token

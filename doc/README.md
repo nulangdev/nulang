@@ -1,6 +1,6 @@
-# Documentação Nulang
+# Documentação Nu
 
-Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Node.js-like escrito em Go.
+Bem-vindo à documentação completa do Nu - um interpretador JavaScript/Node.js-like escrito em Go.
 
 ## Índice
 
@@ -107,25 +107,25 @@ Bem-vindo à documentação completa do Nulang - um interpretador JavaScript/Nod
 ### Instalação
 
 ```bash
-go build -o nulang ./cmd/nulang
+go build -o nu .
 ```
 
 ### Executar Script
 
 ```bash
-./nulang script.nu
+nu script.js
 ```
 
 ### Modo Watch
 
 ```bash
-./nulang script.nu --watch
+nu script.js --watch
 ```
 
 ### REPL
 
 ```bash
-./nulang
+nu
 ```
 
 ---
@@ -176,12 +176,12 @@ console.log(p.saudar());
 ### Módulos
 
 ```javascript
-// math.nu
+// math.js
 export function add(a, b) {
   return a + b;
 }
 
-// main.nu
+// main.js
 import { add } from "./math";
 console.log(add(1, 2));
 ```
@@ -266,6 +266,6 @@ const util = require("util");
 
 ## Suporte
 
-- **GitHub**: [github.com/nulang/nulang](https://github.com/nulang/nulang)
-- **Extensão**: `.nu`
+- **GitHub**: [github.com/nulangdev/nulang](https://github.com/nulangdev/nulang)
+- **Extensões**: `.js` e `.ts`
 - **Licença**: MIT

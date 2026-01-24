@@ -219,6 +219,10 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseForStatement()
 	case token.WHILE:
 		return p.parseWhileStatement()
+	case token.DO:
+		return p.parseDoWhileStatement()
+	case token.SWITCH:
+		return p.parseSwitchStatement()
 	case token.BREAK:
 		return p.parseBreakStatement()
 	case token.CONTINUE:
@@ -413,6 +417,107 @@ func (p *Parser) parseWhileStatement() *ast.WhileStatement {
 	}
 
 	stmt.Body = p.parseBlockStatement()
+
+	return stmt
+}
+
+func (p *Parser) parseDoWhileStatement() *ast.DoWhileStatement {
+	stmt := &ast.DoWhileStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	stmt.Body = p.parseBlockStatement()
+
+	if !p.expectPeek(token.WHILE) {
+		return nil
+	}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+	stmt.Condition = p.parseExpression(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if p.peekTokenIs(token.SEMICOLON) {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+func (p *Parser) parseSwitchStatement() *ast.SwitchStatement {
+	stmt := &ast.SwitchStatement{Token: p.curToken}
+
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	}
+
+	p.nextToken()
+	stmt.Value = p.parseExpression(LOWEST)
+
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	}
+
+	p.nextToken()
+
+	stmt.Cases = []*ast.CaseClause{}
+
+	for !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+		if p.curTokenIs(token.CASE) {
+			caseClause := &ast.CaseClause{Token: p.curToken}
+			p.nextToken()
+			caseClause.Test = p.parseExpression(LOWEST)
+
+			if !p.expectPeek(token.COLON) {
+				return nil
+			}
+
+			// Parse statements until next case, default, or closing brace
+			caseClause.Body = &ast.BlockStatement{Token: p.curToken}
+			caseClause.Body.Statements = []ast.Statement{}
+			p.nextToken()
+
+			for !p.curTokenIs(token.CASE) && !p.curTokenIs(token.DEFAULT) && !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+				stmtInCase := p.parseStatement()
+				if stmtInCase != nil {
+					caseClause.Body.Statements = append(caseClause.Body.Statements, stmtInCase)
+				}
+				p.nextToken()
+			}
+
+			stmt.Cases = append(stmt.Cases, caseClause)
+		} else if p.curTokenIs(token.DEFAULT) {
+			if !p.expectPeek(token.COLON) {
+				return nil
+			}
+
+			stmt.Default = &ast.BlockStatement{Token: p.curToken}
+			stmt.Default.Statements = []ast.Statement{}
+			p.nextToken()
+
+			for !p.curTokenIs(token.CASE) && !p.curTokenIs(token.RBRACE) && !p.curTokenIs(token.EOF) {
+				stmtInDefault := p.parseStatement()
+				if stmtInDefault != nil {
+					stmt.Default.Statements = append(stmt.Default.Statements, stmtInDefault)
+				}
+				p.nextToken()
+			}
+		} else {
+			p.nextToken()
+		}
+	}
 
 	return stmt
 }

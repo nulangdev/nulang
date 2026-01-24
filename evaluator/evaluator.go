@@ -40,6 +40,10 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 		return evalForStatement(node, env)
 	case *ast.WhileStatement:
 		return evalWhileStatement(node, env)
+	case *ast.DoWhileStatement:
+		return evalDoWhileStatement(node, env)
+	case *ast.SwitchStatement:
+		return evalSwitchStatement(node, env)
 	case *ast.BreakStatement:
 		return BREAK
 	case *ast.ContinueStatement:
@@ -265,6 +269,115 @@ func evalWhileStatement(ws *ast.WhileStatement, env *object.Environment) object.
 		}
 	}
 	return UNDEFINED
+}
+
+func evalDoWhileStatement(dw *ast.DoWhileStatement, env *object.Environment) object.Object {
+	for {
+		// Execute body first (at least once)
+		result := Eval(dw.Body, env)
+		if result != nil {
+			if result.Type() == object.RETURN_VALUE_OBJ || result.Type() == object.ERROR_OBJ {
+				return result
+			}
+			if result.Type() == object.BREAK_OBJ {
+				break
+			}
+		}
+		// Then check condition
+		condition := Eval(dw.Condition, env)
+		if isError(condition) {
+			return condition
+		}
+		if !isTruthy(condition) {
+			break
+		}
+	}
+	return UNDEFINED
+}
+
+func evalSwitchStatement(ss *ast.SwitchStatement, env *object.Environment) object.Object {
+	switchVal := Eval(ss.Value, env)
+	if isError(switchVal) {
+		return switchVal
+	}
+
+	matched := false
+	shouldFallthrough := false
+
+	for _, caseClause := range ss.Cases {
+		if !matched && !shouldFallthrough {
+			testVal := Eval(caseClause.Test, env)
+			if isError(testVal) {
+				return testVal
+			}
+			// Strict equality check
+			if objectsEqual(switchVal, testVal) {
+				matched = true
+			}
+		}
+
+		if matched || shouldFallthrough {
+			result := Eval(caseClause.Body, env)
+			if result != nil {
+				if result.Type() == object.RETURN_VALUE_OBJ || result.Type() == object.ERROR_OBJ {
+					return result
+				}
+				if result.Type() == object.BREAK_OBJ {
+					return UNDEFINED
+				}
+			}
+			// If no break, fall through to next case
+			shouldFallthrough = true
+		}
+	}
+
+	// Execute default if no match or fallthrough
+	if ss.Default != nil && (matched || !matched && !shouldFallthrough || shouldFallthrough) {
+		if !matched && !shouldFallthrough {
+			// No case matched, execute default
+			result := Eval(ss.Default, env)
+			if result != nil && result.Type() != object.BREAK_OBJ {
+				return result
+			}
+		} else if shouldFallthrough {
+			// Falling through to default
+			result := Eval(ss.Default, env)
+			if result != nil && result.Type() != object.BREAK_OBJ {
+				return result
+			}
+		}
+	}
+
+	return UNDEFINED
+}
+
+// objectsEqual checks if two objects are equal (strict equality)
+func objectsEqual(a, b object.Object) bool {
+	if a.Type() != b.Type() {
+		return false
+	}
+	switch av := a.(type) {
+	case *object.Number:
+		if bv, ok := b.(*object.Number); ok {
+			return av.Value == bv.Value
+		}
+	case *object.String:
+		if bv, ok := b.(*object.String); ok {
+			return av.Value == bv.Value
+		}
+	case *object.Boolean:
+		if bv, ok := b.(*object.Boolean); ok {
+			return av.Value == bv.Value
+		}
+	case *object.Null:
+		_, ok := b.(*object.Null)
+		return ok
+	case *object.Undefined:
+		_, ok := b.(*object.Undefined)
+		return ok
+	}
+	// Reference equality for objects
+	return a == b
 }
 
 func evalThrowStatement(ts *ast.ThrowStatement, env *object.Environment) object.Object {

@@ -800,6 +800,78 @@ func initBuiltins() {
 
 	// Proxy constructor
 	builtins["Proxy"] = initProxy()
+
+	// Symbol constructor and static methods
+	symbolRegistry := make(map[string]*object.Symbol)
+	symbolReverseRegistry := make(map[uint64]string)
+
+	symbolConstructor := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+
+	// Symbol(description) - creates a new unique symbol
+	symbolConstructor.Set("__call__", &object.Builtin{Name: "Symbol", Fn: func(args ...object.Object) object.Object {
+		description := ""
+		if len(args) > 0 {
+			description = objectToString(args[0])
+		}
+		return object.NewSymbol(description)
+	}})
+
+	// Symbol.for(key) - returns a symbol from the global registry
+	symbolConstructor.Set("for", &object.Builtin{Name: "for", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("Symbol.for requires a key argument")
+		}
+		key := objectToString(args[0])
+		if sym, exists := symbolRegistry[key]; exists {
+			return sym
+		}
+		sym := object.NewSymbol(key)
+		symbolRegistry[key] = sym
+		symbolReverseRegistry[sym.ID] = key
+		return sym
+	}})
+
+	// Symbol.keyFor(symbol) - returns the key for a symbol in the global registry
+	symbolConstructor.Set("keyFor", &object.Builtin{Name: "keyFor", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("Symbol.keyFor requires a symbol argument")
+		}
+		sym, ok := args[0].(*object.Symbol)
+		if !ok {
+			return newError("Symbol.keyFor: argument must be a symbol")
+		}
+		if key, exists := symbolReverseRegistry[sym.ID]; exists {
+			return &object.String{Value: key}
+		}
+		return UNDEFINED
+	}})
+
+	builtins["Symbol"] = symbolConstructor
+
+	// BigInt constructor
+	builtins["BigInt"] = &object.Builtin{Name: "BigInt", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("BigInt requires a value argument")
+		}
+		switch v := args[0].(type) {
+		case *object.Number:
+			// Convert to integer string
+			intVal := int64(v.Value)
+			return &object.BigInt{Value: fmt.Sprintf("%d", intVal)}
+		case *object.String:
+			// Parse as integer string
+			value := v.Value
+			// Remove 'n' suffix if present
+			if len(value) > 0 && value[len(value)-1] == 'n' {
+				value = value[:len(value)-1]
+			}
+			return &object.BigInt{Value: value}
+		case *object.BigInt:
+			return v
+		default:
+			return newError("Cannot convert %s to BigInt", args[0].Type())
+		}
+	}}
 }
 
 func stringify(obj object.Object) string {

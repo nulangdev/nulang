@@ -1,10 +1,10 @@
 # Packages e Dependencies
 
-O sistema de módulos Nulang suporta tanto módulos internos quanto módulos de terceiros.
+O sistema de módulos Nu suporta tanto módulos internos quanto módulos de terceiros.
 
 ## Módulos Built-in
 
-Módulos que vêm integrados com Nulang:
+Módulos que vêm integrados com Nu:
 
 | Módulo        | Descrição                          |
 | ------------- | ---------------------------------- |
@@ -30,43 +30,43 @@ import { join } from "path";
 
 ## Estrutura de Pacotes
 
-### Diretório .nu_modules
+### Diretório node_modules
 
-Pacotes de terceiros são armazenados em `.nu_modules`:
+Pacotes de terceiros são armazenados em `node_modules`:
 
 ```
 projeto/
-├── .nu_modules/
+├── node_modules/
 │   ├── meu-pacote/
-│   │   ├── index.nu
+│   │   ├── index.js
 │   │   └── lib/
-│   │       └── utils.nu
+│   │       └── utils.js
 │   └── outro-pacote/
-│       └── index.nu
+│       └── index.js
 ├── src/
-│   └── main.nu
-└── index.nu
+│   └── main.js
+└── index.js
 ```
 
 ### Estrutura de um Pacote
 
-Um pacote deve ter ao menos um `index.nu`:
+Um pacote deve ter ao menos um `index.js`:
 
 ```
 meu-pacote/
-├── index.nu      # Entrada principal
+├── index.js      # Entrada principal
 ├── lib/          # Código fonte
-│   ├── utils.nu
-│   └── helpers.nu
+│   ├── utils.js
+│   └── helpers.js
 └── README.md     # Documentação
 ```
 
 ## Importando Pacotes
 
-### De .nu_modules
+### De node_modules
 
 ```javascript
-// Importa .nu_modules/meu-pacote/index.nu
+// Importa node_modules/meu-pacote/index.js
 const pkg = require("meu-pacote");
 import pkg from "meu-pacote";
 ```
@@ -88,7 +88,7 @@ import { helper } from "../lib/helper";
 ### Exportando com CommonJS
 
 ```javascript
-// utils.nu
+// utils.js
 
 function add(a, b) {
   return a + b;
@@ -112,7 +112,7 @@ module.exports = {
 ### Exportando com ES6
 
 ```javascript
-// utils.nu
+// utils.js
 
 export function add(a, b) {
   return a + b;
@@ -169,15 +169,17 @@ O sistema de módulos resolve caminhos na seguinte ordem:
 
 ### Extensões
 
-Se não especificada, Nulang tenta:
+Se não especificada, Nu tenta:
 
-1. `nome.nu`
-2. `nome/index.nu`
+1. `nome.ts`
+2. `nome.js`
+3. `nome/index.ts`
+4. `nome/index.js`
 
 ```javascript
 // Estes são equivalentes
 require("./utils");
-require("./utils.nu");
+require("./utils.js");
 ```
 
 ## Variáveis de Módulo
@@ -225,7 +227,7 @@ Caminho absoluto do arquivo atual.
 
 ```javascript
 console.log(__filename);
-// /Users/admin/projeto/src/utils.nu
+// /Users/admin/projeto/src/utils.js
 ```
 
 ### \_\_dirname
@@ -242,7 +244,7 @@ console.log(__dirname);
 ### Pacote de Utilitários
 
 ```javascript
-// .nu_modules/my-utils/index.nu
+// node_modules/my-utils/index.js
 
 export function capitalize(str) {
   if (str.length === 0) return str;
@@ -262,7 +264,7 @@ export function truncate(str, len) {
 ### Pacote de Validação
 
 ```javascript
-// .nu_modules/validator/index.nu
+// node_modules/validator/index.js
 
 export function isEmail(str) {
   return str.includes("@") && str.includes(".");
@@ -284,7 +286,7 @@ export function maxLength(str, max) {
 ### Pacote de Logger
 
 ```javascript
-// .nu_modules/logger/index.nu
+// node_modules/logger/index.js
 const fs = require("fs");
 
 class Logger {
@@ -318,7 +320,7 @@ export default Logger;
 ## Uso no Projeto
 
 ```javascript
-// main.nu
+// main.js
 import { capitalize, slugify } from "my-utils";
 import { isEmail, minLength } from "validator";
 import Logger from "logger";
@@ -351,7 +353,7 @@ console.log(slug); // "meu-artigo-legal"
 
 ```javascript
 // ✅ Bom - módulo focado
-// math.nu
+// math.js
 export function add(a, b) {
   return a + b;
 }
@@ -360,7 +362,7 @@ export function subtract(a, b) {
 }
 
 // ❌ Ruim - módulo com responsabilidades misturadas
-// utils.nu
+// utils.js
 export function add(a, b) {
   return a + b;
 }
