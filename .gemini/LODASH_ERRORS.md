@@ -1,57 +1,65 @@
 # Nulang Lodash Compatibility - Error Documentation
 
-**Data**: 2026-01-24  
-**Status**: 72/86 testes passando (84%)
+**Última Atualização**: 2026-01-26  
+**Status**: 76/86 testes passando (88%)
 
 ---
 
-## Resumo Executivo
+## 🎯 Resumo Executivo
 
-Este documento descreve os erros e bloqueios identificados durante o trabalho de compatibilidade entre Nulang e Lodash v4.17.23. Os problemas estão organizados por categoria e prioridade.
+Este documento descreve os erros e as soluções implementadas durante o trabalho de compatibilidade entre Nulang e Lodash v4.17.23.
 
----
+**Progresso Total**: 67/86 (78%) → 77/86 (90%) → 76/86 (88%)
 
-## ✅ Problema Crítico Resolvido: Regex Lookahead
-
-### Descrição
-
-O Go's `regexp` padrão (baseado em RE2) não suporta lookahead `(?=...)` e lookbehind `(?<=...)`. Isso quebrava o `_.words` do Lodash, que usa lookahead para separar palavras em strings com hífens, underscores ou camelCase.
-
-### Solução
-
-Substituímos `regexp` por `regexp2` (`github.com/dlclark/regexp2`), que suporta PCRE-style regex com lookahead/lookbehind.
-
-### Funções Lodash que Agora Funcionam
-
-- ✅ `_.words` - agora divide strings corretamente
-- ✅ `_.camelCase`
-- ✅ `_.kebabCase`
-- ✅ `_.snakeCase`
-- ✅ `_.lowerCase`
-- ✅ `_.upperCase` (antes falhava com hífens)
-- ✅ `_.trim`
+Os problemas estão organizados por categoria e prioridade.
 
 ---
 
-## ✅ Problema Crítico Resolvido: Regex Literal Parsing
+## ✅ Correções Implementadas (2026-01-26)
 
-### Descrição Original
+### 1. Prototype Chain e Object.prototype
 
-O parsing de literais regex contendo sequências de escape (como `\s`, `\d`, `\w`) estava incorreto.
+Implementamos a busca de propriedades no prototype chain:
 
-### Solução
+- **getObjectPrototype()**: Função helper para obter Object.prototype
+- **evalMemberExpression**: Fallback para Object.prototype quando propriedade não existe
+- **evalIndexExpression**: Mesmo fallback para bracket notation
 
-Implementamos:
+Métodos do Object.prototype implementados:
 
-- Campo `Position` no `Token` para guardar posição inicial
-- Método `SetPosition()` no lexer para restauração
-- Lógica em `parseRegexLiteral()` para restaurar posição antes de `ScanRegex()`
+- `toString()` - Retorna `[object Type]` para type detection
+- `hasOwnProperty(prop)` - Verifica propriedades próprias
+- `valueOf()` - Retorna o valor do objeto
+- `constructor` - Aponta para Object constructor
+
+### 2. typeof para ObjectMap callable
+
+Modificamos `evalTypeofExpression` para retornar `"function"` para ObjectMaps que têm `__call__`, como o construtor Object.
+
+### 3. Array.from para Sets e Maps
+
+Expandimos `Array.from` para suportar:
+
+- Sets (via `_set` property)
+- Maps (via `_map` property)
+- Iterables com method `values()`
+
+### 4. hasOwnProperty Multi-Pattern
+
+Implementamos `hasOwnProperty` para funcionar com múltiplos padrões de chamada:
+
+- `obj.hasOwnProperty('prop')` - wrapper prepends object
+- `Object.prototype.hasOwnProperty.call(obj, 'prop')` - .call pattern
+
+### 5. toString Type Detection
+
+Corrigimos `Object.prototype.toString` para encontrar o objeto correto nos argumentos quando chamado via `.call()`, evitando retornar `[object Object]` para funções.
 
 ---
 
-## 🟠 Erros de Lógica Pendentes
+## 🟠 Testes Pendentes (10 testes)
 
-### 1. `_.find` - Retorno Incorreto
+### 1. `_.find` - Off-by-One Bug
 
 **Sintoma**:
 
@@ -59,7 +67,7 @@ Implementamos:
 _.find([1, 2, 3, 4], (n) => n > 2); // Retorna 4, esperado 3
 ```
 
-**Status**: 🔍 Investigação pendente
+**Análise**: O `_.findIndex` retorna o índice correto (2), mas `_.find` retorna o elemento seguinte. Parece ser um bug no timing de captura do valor dentro do lodash.
 
 ---
 
@@ -68,87 +76,75 @@ _.find([1, 2, 3, 4], (n) => n > 2); // Retorna 4, esperado 3
 **Sintoma**:
 
 ```javascript
-_.uniq([1, 2, 1, 3, 2]); // Retorna [1, 2, 1, 3, 2], esperado [1, 2, 3]
+_.uniq([1, 2, 1, 3, 2]); // Retorna [1, 2, 1, 3, 2]
 ```
 
-**Status**: 🔍 Investigação pendente
+**Análise**: `Array.from(set)` agora funciona, mas o lodash usa padrões internos diferentes que ainda não estão funcionando.
 
 ---
 
-### 3. `_.assign` - Não Mescla Objetos
+### 3. `_.merge` - Deep Merge Falha
 
 **Sintoma**:
 
 ```javascript
-_.assign({ a: 1 }, { b: 2 }, { c: 3 }); // Retorna {a: 1}, esperado {a: 1, b: 2, c: 3}
+_.merge({ a: { x: 1 } }, { a: { y: 2 } }); // Retorna {a: {y: 2}}
 ```
 
-**Status**: 🔍 Investigação pendente
+**Análise**: Não está fazendo merge profundo corretamente.
 
 ---
 
-### 4. `_.groupBy` / `_.countBy`
+### 4. `_.get` com String Path - "not a function: UNDEFINED"
 
-**Sintoma**: Retorna `false`
+**Sintoma**:
 
-**Status**: 🔍 Investigação pendente
+```javascript
+_.get(obj, "a.b.c"); // Error: not a function: UNDEFINED
+_.get(obj, ["a", "b", "c"]); // Funciona!
+```
 
----
-
-### 5. `_.has`
-
-**Sintoma**: Retorna `false`
-
-**Status**: 🔍 Investigação pendente
+**Análise**: O problema está na conversão de string path para array. Array path funciona.
 
 ---
 
-### 6. `_.invert`
+### 5. `_.entries` - "not a function: UNDEFINED"
 
-**Sintoma**: Retorna `false`
-
-**Status**: 🔍 Investigação pendente
+**Sintoma**: Erro interno no lodash mesmo que `Object.entries` funciona.
 
 ---
 
-## 🔴 Erros "not a function: UNDEFINED"
+### 6. `_.invert` - Keys Incorretas
 
-Estes erros indicam que uma função helper interna do Lodash não está sendo resolvida corretamente.
+**Sintoma**:
 
-### Funções Afetadas
+```javascript
+_.invert({ a: "1", b: "2" }); // Retorna {[object String]: ...}
+```
 
-- `_.merge`
-- `_.get`
-- `_.isPlainObject`
-- `_.defaultsDeep`
-
-### Causa Provável
-
-Acesso a propriedades do `Object.prototype` ou verificação de prototype chain que não está implementada em Nulang.
-
-**Status**: 🔍 Investigação pendente
+**Análise**: Problema na conversão de valores para strings como keys de objeto.
 
 ---
 
-## 🟡 Erros de Implementação Faltante
+### 7. `_.isEqual` - "not a function: UNDEFINED"
 
-### 1. `_.isEqual` - Deep Equality
-
-**Sintoma**: Retorna `false` para objetos que deveriam ser iguais.
-
-**Causa Provável**: Comparação recursiva de objetos/arrays não implementada corretamente.
+**Análise**: Erro interno no lodash.
 
 ---
 
-### 2. `_.memoize`
+### 8. `_.isPlainObject` - Retorna false para {}
 
-**Sintoma**: Retorna `false` em vez de valor cacheado.
-
-**Causa Provável**: Problema no mecanismo de cache ou wrapper de função.
+**Análise**: Todos os checks manuais passam (typeof, constructor, hasOwnProperty), mas algo interno no lodash ainda falha.
 
 ---
 
-## ✅ Problemas Resolvidos
+### 9. `_.defaultsDeep` - "not a function: UNDEFINED"
+
+**Análise**: Erro interno no lodash.
+
+---
+
+## ✅ Problemas Resolvidos Anteriormente
 
 | Problema                           | Solução                         | Arquivo                      |
 | ---------------------------------- | ------------------------------- | ---------------------------- |
@@ -166,29 +162,22 @@ Acesso a propriedades do `Object.prototype` ou verificação de prototype chain 
 
 ## Próximos Passos Recomendados
 
-1. **PRIORIDADE ALTA**: Resolver erros "not a function: UNDEFINED"
-   - Investigar acesso a `Object.prototype`
-   - Verificar resolução de propriedades em prototype chain
+1. **PRIORIDADE ALTA**: Investigar erros "not a function: UNDEFINED"
+   - Relacionado ao acesso interno de propriedades no lodash
+   - Pode ser um bug na conversão de string path
 
-2. **PRIORIDADE MÉDIA**: Debugar `_.find` (off-by-one) e `_.uniq` (Set usage)
-   - Adicionar logs nas funções internas do Lodash
-   - Verificar comportamento de iteradores
-
-3. **PRIORIDADE BAIXA**: Implementar métodos faltantes
-   - Deep equality para `_.isEqual`
-   - Cache mechanism para `_.memoize`
+2. **PRIORIDADE MÉDIA**: Debugar `_.find` (off-by-one)
+   - Investigar o loop interno do lodash
+3. **PRIORIDADE MÉDIA**: Investigar `_.isPlainObject`
+   - Verificar qual check exato está falhando dentro do lodash
 
 ---
 
 ## Debug Commands
 
 ```bash
-# Testar regex lookahead
-printf 'var re = /[a-z]+(?=[A-Z])/g;\nconsole.log("helloWorld".match(re));\n' > /tmp/t.js
-./nulang /tmp/t.js
-
-# Testar _.words
-printf 'import _ from "lodash";\nconsole.log(_.words("hello-world"));\n' > examples/t.js
+# Testar _.isPlainObject
+printf 'import _ from "lodash";\nconsole.log(_.isPlainObject({}));\n' > examples/t.js
 ./nulang examples/t.js
 
 # Rodar todos os testes Lodash

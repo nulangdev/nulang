@@ -66,6 +66,24 @@ func getObjectTag(obj object.Object) string {
 // builtins contains all global built-in objects and functions
 var builtins map[string]object.Object
 
+// getObjectPrototype returns the Object.prototype ObjectMap for prototype chain lookups
+// This is used to find methods like toString(), valueOf(), hasOwnProperty() on regular objects
+func getObjectPrototype() *object.ObjectMap {
+	if builtins == nil {
+		return nil
+	}
+	if obj, ok := builtins["Object"]; ok {
+		if objMap, ok := obj.(*object.ObjectMap); ok {
+			if proto, ok := objMap.Get("prototype"); ok {
+				if protoMap, ok := proto.(*object.ObjectMap); ok {
+					return protoMap
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func initBuiltins() {
 	if builtins != nil {
 		return
@@ -573,7 +591,38 @@ func initBuiltins() {
 				elements[i] = &object.String{Value: string(r)}
 			}
 		case *object.ObjectMap:
-			// Check for length property
+			// Check if this is a Set (has _set property)
+			if setObj, ok := arg.Get("_set"); ok {
+				if nuSet, ok := setObj.(*NuSet); ok {
+					elements = make([]object.Object, len(nuSet.Order))
+					for i, key := range nuSet.Order {
+						elements[i] = nuSet.Store[key]
+					}
+					break
+				}
+			}
+			// Check if this is a Map (has _map property) - get values
+			if mapObj, ok := arg.Get("_map"); ok {
+				if nuMap, ok := mapObj.(*NuMap); ok {
+					elements = make([]object.Object, len(nuMap.Order))
+					for i, key := range nuMap.Order {
+						elements[i] = nuMap.Store[key].Value
+					}
+					break
+				}
+			}
+			// Check for values() method (for iterables)
+			if valuesFn, ok := arg.Get("values"); ok {
+				if builtin, ok := valuesFn.(*object.Builtin); ok {
+					result := builtin.Fn()
+					if arr, ok := result.(*object.Array); ok {
+						elements = make([]object.Object, len(arr.Elements))
+						copy(elements, arr.Elements)
+						break
+					}
+				}
+			}
+			// Check for length property (array-like)
 			if lenProp, ok := arg.Get("length"); ok {
 				if num, ok := lenProp.(*object.Number); ok {
 					l := int(num.Value)
@@ -737,7 +786,6 @@ func initBuiltins() {
 		}
 		return &object.Array{Elements: []object.Object{}}
 	}})
-	
 	// Object.prototype with standard methods for type detection
 	objectPrototype := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
 	
@@ -747,28 +795,198 @@ func initBuiltins() {
 	objectPrototypeToString := &object.Builtin{
 		Name: "toString",
 		Fn: func(args ...object.Object) object.Object {
-			// When called via .call(value), args[0] is the value to detect type of
-			// When called directly (no args), return [object Object]
+			// When called via .call(value), args may include the prototype wrapper
+			// Pattern: obj.toString() -> args = [obj] (from wrapper)
+			// Pattern: Object.prototype.toString.call(value) -> args = [Object.prototype, value] (from wrapper + .call)
 			if len(args) == 0 {
 				return &object.String{Value: "[object Object]"}
 			}
-			return &object.String{Value: getObjectTag(args[0])}
+			
+			// Find the actual value to get the type for:
+			// - If only 1 arg, use it
+			// - If multiple args, use the last one that's not an ObjectMap with toString (skip the prototype)
+			target := args[0]
+			if len(args) >= 2 {
+				// When called via .call(), the second arg is the actual value we want to inspect
+				// Skip the first arg (which is the prototype from the wrapper)
+				target = args[len(args)-1]
+				// But if the last arg is also ObjectMap, check if it's the prototype
+				// by seeing if non-last args have a different type
+				for i := len(args) - 1; i >= 0; i-- {
+					// Use the first non-prototype-like value
+					if _, ok := args[i].(*object.ObjectMap); !ok {
+						target = args[i]
+						break
+					}
+				}
+			}
+			
+			return &object.String{Value: getObjectTag(target)}
 		},
 	}
 	objectPrototype.Set("toString", objectPrototypeToString)
 	
 	// Object.prototype.hasOwnProperty
 	objectPrototype.Set("hasOwnProperty", &object.Builtin{Name: "hasOwnProperty", Fn: func(args ...object.Object) object.Object {
-		// Simplified - returns false by default
+		// This function can be called in multiple patterns:
+		// 1. obj.hasOwnProperty('prop') - wrapper prepends obj, so args = [obj, 'prop']
+		// 2. Object.prototype.hasOwnProperty.call(obj, 'prop') - with wrapper on prototype access,
+		//    args may be [Object.prototype, obj, 'prop'] or [obj, 'prop']
+		
+		if len(args) == 0 {
+			return FALSE
+		}
+		
+		var obj *object.ObjectMap
+		var propName string
+		
+		// Find the last ObjectMap and the string after it
+		// Pattern: scan args to find [ObjectMap, String] pair (the actual obj and prop)
+		for i := len(args) - 1; i >= 0; i-- {
+			if str, ok := args[i].(*object.String); ok {
+				propName = str.Value
+				// Look for ObjectMap before this string
+				for j := i - 1; j >= 0; j-- {
+					if om, ok := args[j].(*object.ObjectMap); ok {
+						obj = om
+						break
+					}
+				}
+				break
+			}
+		}
+		
+		// If we didn't find a String, try objectToString on the last arg
+		if propName == "" && len(args) >= 2 {
+			// Assume last arg is property name
+			propName = objectToString(args[len(args)-1])
+			// And find first ObjectMap (skip Object.prototype in multi-arg case)
+			for i := 0; i < len(args)-1; i++ {
+				if om, ok := args[i].(*object.ObjectMap); ok {
+					obj = om
+					// If we have 3+ args and first is prototype, use second ObjectMap
+					if len(args) >= 3 && i == 0 {
+						// Check if there's another ObjectMap
+						for j := i + 1; j < len(args)-1; j++ {
+							if om2, ok := args[j].(*object.ObjectMap); ok {
+								obj = om2
+								break
+							}
+						}
+					}
+					break
+				}
+			}
+		}
+		
+		// Check if the property exists in the object's own properties
+		if obj != nil && propName != "" {
+			_, exists := obj.Get(propName)
+			return nativeBoolToBooleanObject(exists)
+		}
+		
 		return FALSE
 	}})
 	
 	// Object.prototype.valueOf
 	objectPrototype.Set("valueOf", &object.Builtin{Name: "valueOf", Fn: func(args ...object.Object) object.Object {
+		// When called via .call(value), return the value
+		if len(args) > 0 {
+			return args[0]
+		}
 		return UNDEFINED
 	}})
 	
+	// Object.prototype.constructor - points to the Object constructor
+	// This is critical for lodash's isPlainObject check
+	objectPrototype.Set("constructor", objectObj)
+	
+	// Object.assign(target, ...sources) - copies all enumerable own properties from source objects to target
+	objectObj.Set("assign", &object.Builtin{Name: "assign", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("Object.assign requires at least 1 argument")
+		}
+		
+		target, ok := args[0].(*object.ObjectMap)
+		if !ok {
+			// In JavaScript, primitives are converted to objects, but we'll just return them
+			return args[0]
+		}
+		
+		// Copy properties from all source objects
+		for i := 1; i < len(args); i++ {
+			source, ok := args[i].(*object.ObjectMap)
+			if !ok {
+				// Skip non-objects (null, undefined, primitives)
+				continue
+			}
+			
+			// Copy all enumerable own properties
+			for key, pair := range source.Pairs {
+				target.Set(key, pair.Value)
+			}
+		}
+		
+		return target
+	}})
+	
+	// Object.create(proto[, propertiesObject]) - creates a new object with the specified prototype
+	objectObj.Set("create", &object.Builtin{Name: "create", Fn: func(args ...object.Object) object.Object {
+		newObj := &object.ObjectMap{Pairs: make(map[string]object.ObjectPair)}
+		
+		if len(args) > 0 {
+			// In a full implementation, we'd set __proto__ here
+			// For now, we create a basic object and copy proto methods if it's an ObjectMap
+			if proto, ok := args[0].(*object.ObjectMap); ok {
+				// Copy prototype properties (simplified)
+				for key, pair := range proto.Pairs {
+					newObj.Set(key, pair.Value)
+				}
+			}
+		}
+		
+		// If second argument is provided (propertiesObject), copy its properties
+		if len(args) > 1 {
+			if props, ok := args[1].(*object.ObjectMap); ok {
+				for key, pair := range props.Pairs {
+					// In full implementation, we'd handle property descriptors
+					// For now, just copy the value
+					if descriptor, ok := pair.Value.(*object.ObjectMap); ok {
+						if val, exists := descriptor.Get("value"); exists {
+							newObj.Set(key, val)
+						}
+					}
+				}
+			}
+		}
+		
+		return newObj
+	}})
+	
+	// Object.getPrototypeOf(obj) - returns the prototype of the specified object
+	objectObj.Set("getPrototypeOf", &object.Builtin{Name: "getPrototypeOf", Fn: func(args ...object.Object) object.Object {
+		if len(args) < 1 {
+			return newError("Object.getPrototypeOf requires an argument")
+		}
+		
+		// For now, return objectPrototype for all ObjectMaps
+		// In a full implementation, we'd track __proto__ chains
+		switch args[0].(type) {
+		case *object.ObjectMap:
+			return objectPrototype
+		case *object.Array:
+			// Would return Array.prototype
+			return objectPrototype
+		case *object.Function:
+			// Would return Function.prototype
+			return objectPrototype
+		default:
+			return NULL
+		}
+	}})
+	
 	objectObj.Set("prototype", objectPrototype)
+
 	builtins["Object"] = objectObj
 	
 	// Global functions

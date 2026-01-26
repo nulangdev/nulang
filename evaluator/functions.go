@@ -206,6 +206,21 @@ func evalIndexExpression(ie *ast.IndexExpression, env *object.Environment) objec
 		if val, ok := objMap.Get(key); ok {
 			return val
 		}
+		// Fallback to Object.prototype for inherited methods
+		if proto := getObjectPrototype(); proto != nil {
+			if protoVal, ok := proto.Get(key); ok {
+				if builtin, ok := protoVal.(*object.Builtin); ok {
+					return &object.Builtin{
+						Name: builtin.Name,
+						Fn: func(args ...object.Object) object.Object {
+							allArgs := append([]object.Object{objMap}, args...)
+							return builtin.Fn(allArgs...)
+						},
+					}
+				}
+				return protoVal
+			}
+		}
 		return UNDEFINED
 	case left.Type() == object.FUNCTION_OBJ:
 		// Functions are objects in JavaScript and can have properties accessed via bracket notation
@@ -276,7 +291,41 @@ func evalMemberExpression(me *ast.MemberExpression, env *object.Environment) obj
 		return evalPromiseProperty(o, propName, env)
 	case *object.ObjectMap:
 		if val, ok := o.Get(propName); ok {
+			// Special handling for Object.prototype methods that need 'this' binding when called directly
+			// These methods expect the object as the first argument for the .call() pattern
+			if builtin, ok := val.(*object.Builtin); ok {
+				switch builtin.Name {
+				case "hasOwnProperty", "toString", "valueOf":
+					// Wrap to pass 'this' (the object) as first argument
+					return &object.Builtin{
+						Name: builtin.Name,
+						Fn: func(args ...object.Object) object.Object {
+							allArgs := append([]object.Object{o}, args...)
+							return builtin.Fn(allArgs...)
+						},
+					}
+				}
+			}
 			return val
+		}
+		// Fallback to Object.prototype for inherited methods like toString, valueOf, hasOwnProperty
+		if proto := getObjectPrototype(); proto != nil {
+			if protoVal, ok := proto.Get(propName); ok {
+				// If it's a builtin function from prototype, wrap it to bind 'this'
+				if builtin, ok := protoVal.(*object.Builtin); ok {
+					// Return a wrapped builtin that passes the object as first argument
+					// This enables patterns like obj.toString() and obj.hasOwnProperty('key')
+					return &object.Builtin{
+						Name: builtin.Name,
+						Fn: func(args ...object.Object) object.Object {
+							// Prepend the object as the first argument (for .call() pattern)
+							allArgs := append([]object.Object{o}, args...)
+							return builtin.Fn(allArgs...)
+						},
+					}
+				}
+				return protoVal
+			}
 		}
 	case *Class:
 		// Access static members of a class
@@ -598,19 +647,25 @@ func evalTypeofExpression(te *ast.TypeofExpression, env *object.Environment) obj
 		}
 		return val
 	}
-	switch val.Type() {
-	case object.NUMBER_OBJ:
+	switch v := val.(type) {
+	case *object.Number:
 		return &object.String{Value: "number"}
-	case object.STRING_OBJ:
+	case *object.String:
 		return &object.String{Value: "string"}
-	case object.BOOLEAN_OBJ:
+	case *object.Boolean:
 		return &object.String{Value: "boolean"}
-	case object.NULL_OBJ:
+	case *object.Null:
 		return &object.String{Value: "object"}
-	case object.UNDEFINED_OBJ:
+	case *object.Undefined:
 		return &object.String{Value: "undefined"}
-	case object.FUNCTION_OBJ, object.BUILTIN_OBJ:
+	case *object.Function, *object.Builtin:
 		return &object.String{Value: "function"}
+	case *object.ObjectMap:
+		// ObjectMap with __call__ should be considered a function (constructors like Object, Array, etc.)
+		if _, hasCall := v.Get("__call__"); hasCall {
+			return &object.String{Value: "function"}
+		}
+		return &object.String{Value: "object"}
 	default:
 		return &object.String{Value: "object"}
 	}
